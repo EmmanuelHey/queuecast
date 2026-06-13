@@ -1,0 +1,42 @@
+import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
+import { Text, View } from "react-native";
+import { EventCard } from "../../components/EventCard";
+import { Screen } from "../../components/Screen";
+import { fetchConcerts } from "../../services/queueService";
+import { useQueueStore } from "../../store/useQueueStore";
+
+export default function HomeScreen() {
+  const concerts = useQueueStore((state) => state.concerts);
+  const { isLoading } = useQuery({ queryKey: ["concerts"], queryFn: fetchConcerts });
+
+  return (
+    <Screen>
+      <View className="pb-5 pt-3">
+        <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">QueueCast</Text>
+        <Text className="mt-3 text-4xl font-black leading-tight text-white">Live lines for tonight's shows</Text>
+        <Text className="mt-3 text-base leading-6 text-slate-400">
+          Check entry, merch, parking, food, and bathroom waits before the opener starts.
+        </Text>
+      </View>
+
+      <View className="mb-4 flex-row rounded-2xl border border-white/10 bg-panel p-4">
+        <View className="flex-1">
+          <Text className="text-2xl font-black text-white">{concerts.length}</Text>
+          <Text className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">tracked events</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-2xl font-black text-white">
+            {Math.round(concerts.reduce((sum, concert) => sum + (concert.lines[0]?.waitMinutes ?? 0), 0) / concerts.length)}
+          </Text>
+          <Text className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">avg entry min</Text>
+        </View>
+      </View>
+
+      <Text className="mb-3 text-lg font-black text-white">{isLoading ? "Tuning in..." : "Nearby concerts"}</Text>
+      {concerts.map((concert) => (
+        <EventCard key={concert.id} concert={concert} onPress={() => router.push(`/event/${concert.id}`)} />
+      ))}
+    </Screen>
+  );
+}

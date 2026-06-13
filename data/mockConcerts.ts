@@ -1,4 +1,169 @@
-import { Concert } from "../types/queue";
+import {
+  ConfidenceLevel,
+  Concert,
+  CrowdLevel,
+  LineEstimate,
+  LineReport,
+  LineType,
+  ReporterStatus,
+  VerificationStatus,
+} from "../types/queue";
+
+type SeedReport = {
+  waitMinutes: number;
+  crowdLevel: CrowdLevel;
+  reporterStatus: ReporterStatus;
+  isNearVenue: boolean;
+  submittedMinutesAgo: number;
+};
+
+type LineSeed = {
+  id: string;
+  eventId: string;
+  type: LineType;
+  reports: SeedReport[];
+};
+
+export function getVerificationStatus(reporterStatus: ReporterStatus, isNearVenue: boolean): VerificationStatus {
+  if (reporterStatus === "on_the_way") {
+    return "on_the_way";
+  }
+
+  if (reporterStatus === "inside") {
+    return "inside_venue";
+  }
+
+  if (isNearVenue) {
+    return "verified_near_venue";
+  }
+
+  return "unverified";
+}
+
+export function getTrustScore(reporterStatus: ReporterStatus, isNearVenue: boolean, submittedAt: number, now = Date.now()) {
+  const statusScore = reporterStatus === "in_line" ? 3 : reporterStatus === "on_the_way" || reporterStatus === "inside" ? 1 : 0;
+  const locationScore = isNearVenue ? 3 : 0;
+  const recentScore = now - submittedAt <= 10 * 60 * 1000 ? 2 : 0;
+
+  return statusScore + locationScore + recentScore;
+}
+
+export function getConfidenceLevel(totalTrustScore: number): ConfidenceLevel {
+  if (totalTrustScore >= 9) {
+    return "High";
+  }
+
+  if (totalTrustScore >= 4) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+export function getVerificationLabel(status: VerificationStatus) {
+  const labels: Record<VerificationStatus, string> = {
+    verified_near_venue: "Verified near venue",
+    unverified: "Unverified",
+    on_the_way: "On the way",
+    inside_venue: "Inside venue",
+  };
+
+  return labels[status];
+}
+
+export function getReporterStatusLabel(status: ReporterStatus) {
+  const labels: Record<ReporterStatus, string> = {
+    in_line: "In line",
+    on_the_way: "On the way",
+    inside: "Already inside",
+    just_checking: "Just checking",
+  };
+
+  return labels[status];
+}
+
+const submittedLabel = (minutesAgo: number) => (minutesAgo <= 0 ? "just now" : `${minutesAgo} min ago`);
+
+export function createReport(lineId: string, seed: SeedReport, index: number, now = Date.now()): LineReport {
+  const submittedAt = now - seed.submittedMinutesAgo * 60 * 1000;
+
+  return {
+    id: `${lineId}-report-${index + 1}`,
+    lineId,
+    waitMinutes: seed.waitMinutes,
+    crowdLevel: seed.crowdLevel,
+    reporterStatus: seed.reporterStatus,
+    isNearVenue: seed.isNearVenue,
+    submittedAt,
+    submittedLabel: submittedLabel(seed.submittedMinutesAgo),
+    trustScore: getTrustScore(seed.reporterStatus, seed.isNearVenue, submittedAt, now),
+    verificationStatus: getVerificationStatus(seed.reporterStatus, seed.isNearVenue),
+  };
+}
+
+export function createLineEstimate(seed: LineSeed, now = Date.now()): LineEstimate {
+  const reports = seed.reports.map((report, index) => createReport(seed.id, report, index, now));
+  return recalculateLineEstimate({
+    id: seed.id,
+    eventId: seed.eventId,
+    type: seed.type,
+    waitMinutes: 0,
+    confidence: "Low",
+    totalTrustScore: 0,
+    reportCount: 0,
+    verifiedReportCount: 0,
+    lastUpdated: "No reports",
+    crowdLevel: "Light",
+    reports,
+  });
+}
+
+export function recalculateLineEstimate(lineEstimate: LineEstimate): LineEstimate {
+  const { reports } = lineEstimate;
+
+  if (!reports.length) {
+    return {
+      ...lineEstimate,
+      waitMinutes: 0,
+      confidence: "Low",
+      totalTrustScore: 0,
+      reportCount: 0,
+      verifiedReportCount: 0,
+      lastUpdated: "No reports",
+    };
+  }
+
+  const totalTrustScore = reports.reduce((sum, report) => sum + report.trustScore, 0);
+  const weightForReport = (report: LineReport) => (totalTrustScore > 0 ? report.trustScore : 1);
+  const weightedWaitTotal = reports.reduce((sum, report) => sum + report.waitMinutes * weightForReport(report), 0);
+  const weightedTrustTotal = reports.reduce((sum, report) => sum + weightForReport(report), 0);
+  const latestReport = reports.reduce((latest, report) => (report.submittedAt > latest.submittedAt ? report : latest), reports[0]);
+  const crowdTotals = reports.reduce<Record<CrowdLevel, number>>(
+    (totals, report) => ({
+      ...totals,
+      [report.crowdLevel]: totals[report.crowdLevel] + weightForReport(report),
+    }),
+    { Light: 0, Steady: 0, Packed: 0 },
+  );
+  const crowdLevel = (Object.keys(crowdTotals) as CrowdLevel[]).reduce((best, level) =>
+    crowdTotals[level] > crowdTotals[best] ? level : best,
+  );
+
+  return {
+    ...lineEstimate,
+    waitMinutes: Math.round(weightedWaitTotal / weightedTrustTotal),
+    confidence: getConfidenceLevel(totalTrustScore),
+    totalTrustScore,
+    reportCount: reports.length,
+    verifiedReportCount: reports.filter((report) => report.verificationStatus === "verified_near_venue").length,
+    lastUpdated: latestReport.submittedLabel,
+    crowdLevel,
+    reports,
+  };
+}
+
+const line = (id: string, eventId: string, type: LineType, reports: SeedReport[]): LineEstimate =>
+  createLineEstimate({ id, eventId, type, reports });
 
 export const mockConcerts: Concert[] = [
   {
@@ -8,13 +173,30 @@ export const mockConcerts: Concert[] = [
     city: "Washington, DC",
     date: "Sat, Jun 20",
     doorsTime: "6:30 PM",
+    showTime: "8:00 PM",
     accent: "#8B5CF6",
     lines: [
-      { id: "solara-entry", eventId: "solara", type: "Entry", waitMinutes: 18, confidence: 86, lastUpdated: "4 min ago", crowdLevel: "Steady" },
-      { id: "solara-merch", eventId: "solara", type: "Merch", waitMinutes: 24, confidence: 72, lastUpdated: "8 min ago", crowdLevel: "Packed" },
-      { id: "solara-parking", eventId: "solara", type: "Parking", waitMinutes: 14, confidence: 69, lastUpdated: "11 min ago", crowdLevel: "Steady" },
-      { id: "solara-food", eventId: "solara", type: "Food", waitMinutes: 9, confidence: 81, lastUpdated: "6 min ago", crowdLevel: "Light" },
-      { id: "solara-bathroom", eventId: "solara", type: "Bathroom", waitMinutes: 6, confidence: 77, lastUpdated: "3 min ago", crowdLevel: "Light" },
+      line("solara-entry", "solara", "Entry", [
+        { waitMinutes: 18, crowdLevel: "Steady", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 4 },
+        { waitMinutes: 22, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: false, submittedMinutesAgo: 12 },
+        { waitMinutes: 15, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 8 },
+      ]),
+      line("solara-merch", "solara", "Merch", [
+        { waitMinutes: 24, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 8 },
+        { waitMinutes: 18, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 16 },
+      ]),
+      line("solara-parking", "solara", "Parking", [
+        { waitMinutes: 14, crowdLevel: "Steady", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 11 },
+        { waitMinutes: 20, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 19 },
+      ]),
+      line("solara-food", "solara", "Food", [
+        { waitMinutes: 9, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 6 },
+        { waitMinutes: 11, crowdLevel: "Steady", reporterStatus: "just_checking", isNearVenue: true, submittedMinutesAgo: 14 },
+      ]),
+      line("solara-bathrooms", "solara", "Bathrooms", [
+        { waitMinutes: 6, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 3 },
+        { waitMinutes: 8, crowdLevel: "Light", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 17 },
+      ]),
     ],
   },
   {
@@ -24,13 +206,27 @@ export const mockConcerts: Concert[] = [
     city: "Morrison, CO",
     date: "Fri, Jun 26",
     doorsTime: "5:45 PM",
+    showTime: "7:15 PM",
     accent: "#06B6D4",
     lines: [
-      { id: "neon-entry", eventId: "neon-pines", type: "Entry", waitMinutes: 32, confidence: 91, lastUpdated: "2 min ago", crowdLevel: "Packed" },
-      { id: "neon-merch", eventId: "neon-pines", type: "Merch", waitMinutes: 17, confidence: 74, lastUpdated: "10 min ago", crowdLevel: "Steady" },
-      { id: "neon-parking", eventId: "neon-pines", type: "Parking", waitMinutes: 41, confidence: 88, lastUpdated: "5 min ago", crowdLevel: "Packed" },
-      { id: "neon-food", eventId: "neon-pines", type: "Food", waitMinutes: 12, confidence: 66, lastUpdated: "12 min ago", crowdLevel: "Steady" },
-      { id: "neon-bathroom", eventId: "neon-pines", type: "Bathroom", waitMinutes: 7, confidence: 80, lastUpdated: "7 min ago", crowdLevel: "Light" },
+      line("neon-entry", "neon-pines", "Entry", [
+        { waitMinutes: 32, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 2 },
+        { waitMinutes: 38, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 7 },
+      ]),
+      line("neon-merch", "neon-pines", "Merch", [
+        { waitMinutes: 17, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 10 },
+        { waitMinutes: 21, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 23 },
+      ]),
+      line("neon-parking", "neon-pines", "Parking", [
+        { waitMinutes: 41, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 5 },
+        { waitMinutes: 35, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: false, submittedMinutesAgo: 18 },
+      ]),
+      line("neon-food", "neon-pines", "Food", [
+        { waitMinutes: 12, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 12 },
+      ]),
+      line("neon-bathrooms", "neon-pines", "Bathrooms", [
+        { waitMinutes: 7, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 7 },
+      ]),
     ],
   },
   {
@@ -40,13 +236,25 @@ export const mockConcerts: Concert[] = [
     city: "Brooklyn, NY",
     date: "Sun, Jun 28",
     doorsTime: "7:00 PM",
+    showTime: "8:30 PM",
     accent: "#F472B6",
     lines: [
-      { id: "velvet-entry", eventId: "velvet-static", type: "Entry", waitMinutes: 11, confidence: 79, lastUpdated: "5 min ago", crowdLevel: "Light" },
-      { id: "velvet-merch", eventId: "velvet-static", type: "Merch", waitMinutes: 19, confidence: 70, lastUpdated: "13 min ago", crowdLevel: "Steady" },
-      { id: "velvet-parking", eventId: "velvet-static", type: "Parking", waitMinutes: 8, confidence: 64, lastUpdated: "15 min ago", crowdLevel: "Light" },
-      { id: "velvet-food", eventId: "velvet-static", type: "Food", waitMinutes: 15, confidence: 76, lastUpdated: "9 min ago", crowdLevel: "Steady" },
-      { id: "velvet-bathroom", eventId: "velvet-static", type: "Bathroom", waitMinutes: 10, confidence: 71, lastUpdated: "4 min ago", crowdLevel: "Steady" },
+      line("velvet-entry", "velvet-static", "Entry", [
+        { waitMinutes: 11, crowdLevel: "Light", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 5 },
+        { waitMinutes: 13, crowdLevel: "Steady", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 15 },
+      ]),
+      line("velvet-merch", "velvet-static", "Merch", [
+        { waitMinutes: 19, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 13 },
+      ]),
+      line("velvet-parking", "velvet-static", "Parking", [
+        { waitMinutes: 8, crowdLevel: "Light", reporterStatus: "on_the_way", isNearVenue: false, submittedMinutesAgo: 15 },
+      ]),
+      line("velvet-food", "velvet-static", "Food", [
+        { waitMinutes: 15, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 9 },
+      ]),
+      line("velvet-bathrooms", "velvet-static", "Bathrooms", [
+        { waitMinutes: 10, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 4 },
+      ]),
     ],
   },
   {
@@ -56,13 +264,25 @@ export const mockConcerts: Concert[] = [
     city: "Austin, TX",
     date: "Thu, Jul 2",
     doorsTime: "6:00 PM",
+    showTime: "7:30 PM",
     accent: "#34D399",
     lines: [
-      { id: "atlas-entry", eventId: "atlas-wave", type: "Entry", waitMinutes: 25, confidence: 84, lastUpdated: "3 min ago", crowdLevel: "Packed" },
-      { id: "atlas-merch", eventId: "atlas-wave", type: "Merch", waitMinutes: 12, confidence: 68, lastUpdated: "16 min ago", crowdLevel: "Steady" },
-      { id: "atlas-parking", eventId: "atlas-wave", type: "Parking", waitMinutes: 29, confidence: 82, lastUpdated: "6 min ago", crowdLevel: "Packed" },
-      { id: "atlas-food", eventId: "atlas-wave", type: "Food", waitMinutes: 7, confidence: 75, lastUpdated: "8 min ago", crowdLevel: "Light" },
-      { id: "atlas-bathroom", eventId: "atlas-wave", type: "Bathroom", waitMinutes: 5, confidence: 79, lastUpdated: "6 min ago", crowdLevel: "Light" },
+      line("atlas-entry", "atlas-wave", "Entry", [
+        { waitMinutes: 25, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 3 },
+        { waitMinutes: 29, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 6 },
+      ]),
+      line("atlas-merch", "atlas-wave", "Merch", [
+        { waitMinutes: 12, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 16 },
+      ]),
+      line("atlas-parking", "atlas-wave", "Parking", [
+        { waitMinutes: 29, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 6 },
+      ]),
+      line("atlas-food", "atlas-wave", "Food", [
+        { waitMinutes: 7, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 8 },
+      ]),
+      line("atlas-bathrooms", "atlas-wave", "Bathrooms", [
+        { waitMinutes: 5, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 6 },
+      ]),
     ],
   },
   {
@@ -72,13 +292,25 @@ export const mockConcerts: Concert[] = [
     city: "Los Angeles, CA",
     date: "Sat, Jul 11",
     doorsTime: "5:30 PM",
+    showTime: "7:00 PM",
     accent: "#FBBF24",
     lines: [
-      { id: "luna-entry", eventId: "luna-circuit", type: "Entry", waitMinutes: 22, confidence: 87, lastUpdated: "1 min ago", crowdLevel: "Steady" },
-      { id: "luna-merch", eventId: "luna-circuit", type: "Merch", waitMinutes: 28, confidence: 73, lastUpdated: "9 min ago", crowdLevel: "Packed" },
-      { id: "luna-parking", eventId: "luna-circuit", type: "Parking", waitMinutes: 36, confidence: 89, lastUpdated: "4 min ago", crowdLevel: "Packed" },
-      { id: "luna-food", eventId: "luna-circuit", type: "Food", waitMinutes: 13, confidence: 78, lastUpdated: "7 min ago", crowdLevel: "Steady" },
-      { id: "luna-bathroom", eventId: "luna-circuit", type: "Bathroom", waitMinutes: 9, confidence: 70, lastUpdated: "10 min ago", crowdLevel: "Light" },
+      line("luna-entry", "luna-circuit", "Entry", [
+        { waitMinutes: 22, crowdLevel: "Steady", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 1 },
+        { waitMinutes: 26, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 18 },
+      ]),
+      line("luna-merch", "luna-circuit", "Merch", [
+        { waitMinutes: 28, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 9 },
+      ]),
+      line("luna-parking", "luna-circuit", "Parking", [
+        { waitMinutes: 36, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 4 },
+      ]),
+      line("luna-food", "luna-circuit", "Food", [
+        { waitMinutes: 13, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 7 },
+      ]),
+      line("luna-bathrooms", "luna-circuit", "Bathrooms", [
+        { waitMinutes: 9, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 10 },
+      ]),
     ],
   },
 ];

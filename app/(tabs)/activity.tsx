@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { Screen } from "../../components/Screen";
@@ -5,8 +6,10 @@ import { useQueueStore } from "../../store/useQueueStore";
 
 export default function ActivityScreen() {
   const reportsSubmitted = useQueueStore((state) => state.reportsSubmitted);
-  const recentLines = useQueueStore((state) =>
-    state.concerts.flatMap((concert) => concert.lines.map((line) => ({ ...line, artist: concert.artist }))),
+  const concerts = useQueueStore((state) => state.concerts);
+  const recentLines = useMemo(
+    () => concerts.flatMap((concert) => concert.lines.map((line) => ({ ...line, artist: concert.artist }))),
+    [concerts],
   );
 
   return (

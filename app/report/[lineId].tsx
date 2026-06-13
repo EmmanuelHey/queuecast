@@ -7,8 +7,9 @@ import { OptionPill } from "../../components/OptionPill";
 import { Screen } from "../../components/Screen";
 import { lineWaitOptions } from "../../constants/theme";
 import { getReporterStatusLabel, getTrustScore, getVerificationLabel, getVerificationStatus } from "../../data/mockConcerts";
+import { verifyNearVenue } from "../../services/locationService";
 import { useQueueStore } from "../../store/useQueueStore";
-import { CrowdLevel, ReporterStatus } from "../../types/queue";
+import { CrowdLevel, LocationPermissionStatus, LocationVerificationState, ReporterStatus } from "../../types/queue";
 
 const crowdLevels: CrowdLevel[] = ["Light", "Steady", "Packed"];
 const reporterStatuses: ReporterStatus[] = ["in_line", "on_the_way", "inside", "just_checking"];
@@ -17,6 +18,7 @@ export default function ReportScreen() {
   const { lineId } = useLocalSearchParams<{ lineId: string }>();
   const queryClient = useQueryClient();
   const concerts = useQueueStore((state) => state.concerts);
+  const venues = useQueueStore((state) => state.venues);
   const submitReport = useQueueStore((state) => state.submitReport);
   const isNearVenue = useQueueStore((state) => state.isNearVenue);
   const lineContext = useMemo(() => {
@@ -30,10 +32,16 @@ export default function ReportScreen() {
   const [crowdLevel, setCrowdLevel] = useState<CrowdLevel>(lineContext.line?.crowdLevel ?? "Steady");
   const [reporterStatus, setReporterStatus] = useState<ReporterStatus>("in_line");
   const [submittedSummary, setSubmittedSummary] = useState<{ trustScore: number; waitMinutes: number } | null>(null);
-  const verificationStatus = getVerificationStatus(reporterStatus, isNearVenue);
-  const trustScore = getTrustScore(reporterStatus, isNearVenue, Date.now());
+  const [permissionStatus, setPermissionStatus] = useState<LocationPermissionStatus>("not_requested");
+  const [locationVerification, setLocationVerification] = useState<LocationVerificationState>("idle");
+  const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
+  const venue = venues.find((item) => item.id === lineContext.concert?.venueId);
+  const isRealLocationVerified = locationVerification === "verified_near_venue";
+  const effectiveIsNearVenue = isRealLocationVerified || (locationVerification === "idle" && isNearVenue);
+  const verificationStatus = getVerificationStatus(reporterStatus, effectiveIsNearVenue);
+  const trustScore = getTrustScore(reporterStatus, effectiveIsNearVenue, Date.now(), Date.now(), isRealLocationVerified);
 
-  if (!lineContext.line || !lineContext.concert) {
+  if (!lineContext.line || !lineContext.concert || !venue) {
     return (
       <Screen>
         <EmptyState title="Line unavailable" body="This line is not in the current mock schedule." />
@@ -44,11 +52,29 @@ export default function ReportScreen() {
   const { concert, line } = lineContext;
 
   const handleSubmit = () => {
-    submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue });
+    submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue: effectiveIsNearVenue, isRealLocationVerified });
     queryClient.invalidateQueries({ queryKey: ["concerts"] });
     queryClient.invalidateQueries({ queryKey: ["concert", concert.id] });
     setSubmittedSummary({ trustScore, waitMinutes });
   };
+
+  const handleVerifyLocation = async () => {
+    const result = await verifyNearVenue(venue);
+    setPermissionStatus(result.permissionStatus);
+    setLocationVerification(result.verificationState);
+    setDistanceMeters(result.distanceMeters);
+  };
+
+  const locationMessage =
+    locationVerification === "verified_near_venue"
+      ? "Verified near venue"
+      : locationVerification === "too_far"
+        ? "Too far from venue"
+        : locationVerification === "denied"
+          ? "Location denied"
+          : locationVerification === "unavailable"
+            ? "Location unavailable"
+            : "Not requested";
 
   if (submittedSummary) {
     const updatedConcert = concerts.find((item) => item.id === concert.id);
@@ -90,6 +116,27 @@ export default function ReportScreen() {
       </View>
 
       <View className="mb-6 rounded-2xl border border-white/10 bg-panel p-5">
+        <Text className="text-lg font-black text-white">Verify your location</Text>
+        <Text className="mt-2 text-sm leading-6 text-slate-400">
+          Verify you're near the venue to make your report count more. Web and unavailable GPS use a safe mock fallback for now.
+        </Text>
+        <View className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <View className="flex-row items-center justify-between gap-4">
+            <View className="flex-1">
+              <Text className="text-sm font-black text-white">{locationMessage}</Text>
+              <Text className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+                Permission: {permissionStatus.replace("_", " ")}
+              </Text>
+              {distanceMeters !== null ? <Text className="mt-1 text-xs text-slate-400">{distanceMeters}m from venue</Text> : null}
+            </View>
+            <Pressable onPress={handleVerifyLocation} className="rounded-full bg-primary px-4 py-2 active:opacity-80">
+              <Text className="text-xs font-black uppercase tracking-wider text-white">Verify my location</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      <View className="mb-6 rounded-2xl border border-white/10 bg-panel p-5">
         <Text className="mb-4 text-lg font-black text-white">Reporter status</Text>
         <View className="flex-row flex-wrap">
           {reporterStatuses.map((status) => (
@@ -109,7 +156,7 @@ export default function ReportScreen() {
             <Text className="text-xs font-black uppercase tracking-wider text-primary-soft">{trustScore} trust pts</Text>
           </View>
           <Text className="mt-2 text-sm leading-5 text-slate-400">
-            {getVerificationLabel(verificationStatus)}. Real GPS is not connected yet; this uses mock local state.
+            {getVerificationLabel(verificationStatus)}. Real GPS is gated safely and falls back to mock verification when unavailable.
           </Text>
         </View>
       </View>

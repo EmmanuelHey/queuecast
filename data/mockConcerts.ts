@@ -50,6 +50,7 @@ export const mockVenues: Venue[] = [
     city: "Dallas",
     capacity: 20000,
     address: "2500 Victory Ave, Dallas, TX 75219",
+    coordinates: { latitude: 32.7905, longitude: -96.8103 },
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 6,
     bottleneckSeverity: "high",
@@ -65,6 +66,7 @@ export const mockVenues: Venue[] = [
     city: "Dallas",
     capacity: 20000,
     address: "3839 S Fitzhugh Ave, Dallas, TX 75210",
+    coordinates: { latitude: 32.7797, longitude: -96.7619 },
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 4,
     bottleneckSeverity: "high",
@@ -80,6 +82,7 @@ export const mockVenues: Venue[] = [
     city: "Irving",
     capacity: 8000,
     address: "316 W Las Colinas Blvd, Irving, TX 75039",
+    coordinates: { latitude: 32.8766, longitude: -96.9436 },
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 3,
     bottleneckSeverity: "medium",
@@ -95,6 +98,7 @@ export const mockVenues: Venue[] = [
     city: "Dallas",
     capacity: 1625,
     address: "2200 N Lamar St, Dallas, TX 75202",
+    coordinates: { latitude: 32.785, longitude: -96.8084 },
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 2,
     bottleneckSeverity: "medium",
@@ -110,6 +114,7 @@ export const mockVenues: Venue[] = [
     city: "Deep Ellum",
     capacity: 4300,
     address: "2713 Canton St, Dallas, TX 75226",
+    coordinates: { latitude: 32.7831, longitude: -96.7839 },
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 3,
     bottleneckSeverity: "high",
@@ -159,9 +164,15 @@ export function getVerificationStatus(reporterStatus: ReporterStatus, isNearVenu
   return "unverified";
 }
 
-export function getTrustScore(reporterStatus: ReporterStatus, isNearVenue: boolean, submittedAt: number, now = Date.now()) {
+export function getTrustScore(
+  reporterStatus: ReporterStatus,
+  isNearVenue: boolean,
+  submittedAt: number,
+  now = Date.now(),
+  isRealLocationVerified = false,
+) {
   const statusScore = reporterStatus === "in_line" ? 3 : reporterStatus === "on_the_way" || reporterStatus === "inside" ? 1 : 0;
-  const locationScore = isNearVenue ? 3 : 0;
+  const locationScore = isRealLocationVerified ? 5 : isNearVenue ? 3 : 0;
   const recentScore = now - submittedAt <= 10 * 60 * 1000 ? 2 : 0;
 
   return statusScore + locationScore + recentScore;
@@ -213,9 +224,10 @@ export function createReport(lineId: string, seed: SeedReport, index: number, no
     crowdLevel: seed.crowdLevel,
     reporterStatus: seed.reporterStatus,
     isNearVenue: seed.isNearVenue,
+    isRealLocationVerified: false,
     submittedAt,
     submittedLabel: submittedLabel(seed.submittedMinutesAgo),
-    trustScore: getTrustScore(seed.reporterStatus, seed.isNearVenue, submittedAt, now),
+    trustScore: getTrustScore(seed.reporterStatus, seed.isNearVenue, submittedAt, now, false),
     verificationStatus: getVerificationStatus(seed.reporterStatus, seed.isNearVenue),
   };
 }

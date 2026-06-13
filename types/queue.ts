@@ -6,6 +6,15 @@ export type ReporterStatus = "in_line" | "on_the_way" | "inside" | "just_checkin
 
 export type VerificationStatus = "verified_near_venue" | "unverified" | "on_the_way" | "inside_venue";
 
+export type LocationPermissionStatus = "not_requested" | "granted" | "denied";
+
+export type LocationVerificationState = "idle" | "verified_near_venue" | "too_far" | "denied" | "unavailable";
+
+export type LocationCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+
 export type ConfidenceLevel = "Low" | "Medium" | "High";
 
 export type ReporterLevel = "Guest Reporter" | "Bronze Reporter" | "Silver Reporter" | "Gold Reporter" | "Venue Expert";
@@ -74,6 +83,7 @@ export type Venue = {
   city: string;
   capacity: number;
   address: string;
+  coordinates: LocationCoordinates;
   defaultLineTypes: LineType[];
   entryPointsCount: number;
   bottleneckSeverity: BottleneckSeverity;
@@ -87,6 +97,7 @@ export type LineReport = {
   crowdLevel: CrowdLevel;
   reporterStatus: ReporterStatus;
   isNearVenue: boolean;
+  isRealLocationVerified: boolean;
   submittedAt: number;
   submittedLabel: string;
   trustScore: number;
@@ -131,4 +142,5 @@ export type LineReportInput = {
   crowdLevel: CrowdLevel;
   reporterStatus: ReporterStatus;
   isNearVenue: boolean;
+  isRealLocationVerified: boolean;
 };

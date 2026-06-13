@@ -26,9 +26,10 @@ const createSubmittedReport = (report: LineReportInput, index: number): LineRepo
     crowdLevel: report.crowdLevel,
     reporterStatus: report.reporterStatus,
     isNearVenue: report.isNearVenue,
+    isRealLocationVerified: report.isRealLocationVerified,
     submittedAt,
     submittedLabel: nowLabel(),
-    trustScore: getTrustScore(report.reporterStatus, report.isNearVenue, submittedAt),
+    trustScore: getTrustScore(report.reporterStatus, report.isNearVenue, submittedAt, Date.now(), report.isRealLocationVerified),
     verificationStatus,
   };
 };

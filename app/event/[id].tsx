@@ -1,20 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
 import { Screen } from "../../components/Screen";
 import { colors } from "../../constants/theme";
+import { predictEventLines } from "../../services/predictionService";
 import { fetchConcertById } from "../../services/queueService";
 import { useQueueStore } from "../../store/useQueueStore";
+import { ArrivalOffset } from "../../types/queue";
+
+const arrivalOptions: Array<{ label: string; value: ArrivalOffset }> = [
+  { label: "Now", value: 0 },
+  { label: "In 15 minutes", value: 15 },
+  { label: "In 30 minutes", value: 30 },
+  { label: "In 45 minutes", value: 45 },
+  { label: "In 60 minutes", value: 60 },
+];
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const concert = useQueueStore((state) => state.concerts.find((item) => item.id === id));
+  const venue = useQueueStore((state) => state.venues.find((item) => item.id === concert?.venueId));
+  const [arrivalOffset, setArrivalOffset] = useState<ArrivalOffset>(30);
   useQuery({ queryKey: ["concert", id], queryFn: () => fetchConcertById(id), enabled: Boolean(id) });
+  const predictions = useMemo(() => (concert && venue ? predictEventLines(concert, venue, arrivalOffset) : []), [arrivalOffset, concert, venue]);
+  const predictionByLineId = Object.fromEntries(predictions.map((prediction) => [prediction.lineId, prediction]));
 
-  if (!concert) {
+  if (!concert || !venue) {
     return (
       <Screen>
         <EmptyState title="Event unavailable" body="This concert is not in the current mock schedule." />
@@ -23,6 +38,7 @@ export default function EventDetailScreen() {
   }
 
   const primaryLine = concert.lines.find((line) => line.type === "Entry") ?? concert.lines[0];
+  const entryPrediction = predictionByLineId[primaryLine.id];
 
   return (
     <SafeAreaView className="flex-1 bg-ink">
@@ -66,12 +82,50 @@ export default function EventDetailScreen() {
           </View>
         </View>
 
+        <View className="mb-5 rounded-2xl border border-white/10 bg-panel p-4">
+          <Text className="text-lg font-black text-white">When are you arriving?</Text>
+          <Text className="mt-1 text-sm leading-5 text-slate-400">
+            QueueCast predicts line waits using doors time, show time, venue bottlenecks, and your arrival.
+          </Text>
+          <View className="mt-4 flex-row flex-wrap gap-2">
+            {arrivalOptions.map((option) => {
+              const selected = arrivalOffset === option.value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setArrivalOffset(option.value)}
+                  className={`rounded-full border px-4 py-2 ${selected ? "border-primary bg-primary" : "border-white/10 bg-panel-soft"}`}
+                >
+                  <Text className={`text-xs font-black uppercase tracking-wider ${selected ? "text-white" : "text-slate-300"}`}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {entryPrediction ? (
+            <View className="mt-4 rounded-2xl bg-white/5 p-4">
+              <Text className="text-sm leading-6 text-slate-300">
+                Entry is <Text className="font-black text-white">{entryPrediction.currentWaitMinutes} minutes</Text> now, but based on doors
+                time, venue bottleneck, and arrival time, it will likely be{" "}
+                <Text className="font-black text-primary-soft">{entryPrediction.predictedWaitMinutes} minutes</Text> when you get there.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
         <View className="mb-4 flex-row items-center justify-between">
           <Text className="text-lg font-black text-white">Line estimates</Text>
           <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Trust weighted</Text>
         </View>
         {concert.lines.map((line) => (
-          <LineEstimateCard key={line.id} line={line} onReport={() => router.push(`/report/${line.id}`)} />
+          <LineEstimateCard
+            key={line.id}
+            line={line}
+            prediction={predictionByLineId[line.id]}
+            onReport={() => router.push(`/report/${line.id}`)}
+          />
         ))}
       </ScrollView>
 

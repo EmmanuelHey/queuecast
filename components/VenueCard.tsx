@@ -28,6 +28,9 @@ export function VenueCard({ venue, eventCount = 0, onPress }: VenueCardProps) {
         <View className="rounded-full bg-white/10 px-3 py-1.5">
           <Text className="text-xs font-bold text-slate-300">{venue.entryPointsCount} entries</Text>
         </View>
+        <View className="rounded-full bg-white/10 px-3 py-1.5">
+          <Text className="text-xs font-bold capitalize text-slate-300">{venue.bottleneckSeverity} bottleneck</Text>
+        </View>
       </View>
     </Pressable>
   );

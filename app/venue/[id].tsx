@@ -47,6 +47,11 @@ export default function VenueDetailScreen() {
         </View>
       </View>
 
+      <View className="mb-5 rounded-2xl border border-white/10 bg-panel p-4">
+        <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Bottleneck severity</Text>
+        <Text className="mt-1 text-2xl font-black capitalize text-white">{venue.bottleneckSeverity}</Text>
+      </View>
+
       <Text className="mb-3 text-lg font-black text-white">Typical wait patterns</Text>
       <View className="mb-6 rounded-2xl border border-white/10 bg-panel p-4">
         {venue.typicalBottleneckNotes.map((note) => (

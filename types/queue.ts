@@ -12,6 +12,21 @@ export type ReporterLevel = "Guest Reporter" | "Bronze Reporter" | "Silver Repor
 
 export type EventStatus = "Tonight" | "Upcoming" | "Doors soon" | "Live now" | "Ended";
 
+export type ArrivalOffset = 0 | 15 | 30 | 45 | 60;
+
+export type BottleneckSeverity = "low" | "medium" | "high";
+
+export type PredictionTrend = "rise" | "drop" | "steady";
+
+export type PredictionResult = {
+  lineId: string;
+  currentWaitMinutes: number;
+  predictedWaitMinutes: number;
+  trend: PredictionTrend;
+  trendLabel: string;
+  arrivalOffset: ArrivalOffset;
+};
+
 export type Venue = {
   id: string;
   name: string;
@@ -20,6 +35,7 @@ export type Venue = {
   address: string;
   defaultLineTypes: LineType[];
   entryPointsCount: number;
+  bottleneckSeverity: BottleneckSeverity;
   typicalBottleneckNotes: string[];
 };
 
@@ -59,6 +75,10 @@ export type Concert = {
   date: string;
   doorsTime: string;
   showTime: string;
+  doorsMinutes: number;
+  showMinutes: number;
+  endMinutes: number;
+  dayOffset: number;
   status: EventStatus;
   accent: string;
   lines: LineEstimate[];

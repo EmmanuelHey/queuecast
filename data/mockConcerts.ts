@@ -52,6 +52,7 @@ export const mockVenues: Venue[] = [
     address: "2500 Victory Ave, Dallas, TX 75219",
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 6,
+    bottleneckSeverity: "high",
     typicalBottleneckNotes: [
       "Victory Plaza entry stacks up closest to showtime.",
       "Parking queues build around the garage exits after 6 PM.",
@@ -66,6 +67,7 @@ export const mockVenues: Venue[] = [
     address: "3839 S Fitzhugh Ave, Dallas, TX 75210",
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 4,
+    bottleneckSeverity: "high",
     typicalBottleneckNotes: [
       "Fair Park parking can create long walk-in waves.",
       "Entry lines move fastest right after doors open.",
@@ -80,6 +82,7 @@ export const mockVenues: Venue[] = [
     address: "316 W Las Colinas Blvd, Irving, TX 75039",
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 3,
+    bottleneckSeverity: "medium",
     typicalBottleneckNotes: [
       "Garage traffic is the biggest pressure point.",
       "Restaurant foot traffic can slow the plaza entrance.",
@@ -94,6 +97,7 @@ export const mockVenues: Venue[] = [
     address: "2200 N Lamar St, Dallas, TX 75202",
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 2,
+    bottleneckSeverity: "medium",
     typicalBottleneckNotes: [
       "The main entrance line wraps quickly on sold-out club nights.",
       "Restaurant and music-hall traffic overlap near doors.",
@@ -108,6 +112,7 @@ export const mockVenues: Venue[] = [
     address: "2713 Canton St, Dallas, TX 75226",
     defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
     entryPointsCount: 3,
+    bottleneckSeverity: "high",
     typicalBottleneckNotes: [
       "Deep Ellum street parking creates uneven arrival bursts.",
       "Entry gets tight when nearby venues let out.",
@@ -325,6 +330,10 @@ const createEvent = (seed: EventSeed): Concert => {
     date: seed.date,
     doorsTime: seed.doorsTime,
     showTime: seed.showTime,
+    doorsMinutes: seed.doorsMinutes,
+    showMinutes: seed.showMinutes,
+    endMinutes: seed.endMinutes,
+    dayOffset: seed.dayOffset,
     status: getEventStatus(seed),
     accent: seed.accent,
     lines: createLines(seed.id, seed.lineWaits),

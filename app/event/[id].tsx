@@ -7,7 +7,9 @@ import { EmptyState } from "../../components/EmptyState";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
+import { WaitTrendChart } from "../../components/WaitTrendChart";
 import { colors } from "../../constants/theme";
+import { getHistoricalInsightForEvent } from "../../services/historicalService";
 import { predictEventLines } from "../../services/predictionService";
 import { fetchConcertById } from "../../services/queueService";
 import { useQueueStore } from "../../store/useQueueStore";
@@ -29,6 +31,7 @@ export default function EventDetailScreen() {
   const { isLoading } = useQuery({ queryKey: ["concert", id], queryFn: () => fetchConcertById(id), enabled: Boolean(id) });
   const predictions = useMemo(() => (concert && venue ? predictEventLines(concert, venue, arrivalOffset) : []), [arrivalOffset, concert, venue]);
   const predictionByLineId = Object.fromEntries(predictions.map((prediction) => [prediction.lineId, prediction]));
+  const historicalInsight = useMemo(() => (concert ? getHistoricalInsightForEvent(concert) : null), [concert]);
 
   if (!concert || !venue) {
     if (isLoading) {
@@ -148,6 +151,58 @@ export default function EventDetailScreen() {
             body="Be the first person to report entry, merch, parking, food, or bathroom waits for this event."
           />
         )}
+
+        {historicalInsight ? (
+          <View className="mt-5 rounded-2xl border border-white/10 bg-panel p-5">
+            <View className="flex-row items-start justify-between gap-4">
+              <View className="flex-1">
+                <Text className="text-lg font-black text-white">Historical Insights</Text>
+                <Text className="mt-2 text-sm leading-6 text-slate-400">{historicalInsight.statement}</Text>
+              </View>
+              <View
+                className={`rounded-full px-3 py-1.5 ${
+                  historicalInsight.trend === "higher"
+                    ? "bg-red-500/20"
+                    : historicalInsight.trend === "lighter"
+                      ? "bg-emerald-500/20"
+                      : "bg-yellow-400/20"
+                }`}
+              >
+                <Text
+                  className={`text-[10px] font-black uppercase tracking-wider ${
+                    historicalInsight.trend === "higher"
+                      ? "text-red-200"
+                      : historicalInsight.trend === "lighter"
+                        ? "text-emerald-300"
+                        : "text-yellow-200"
+                  }`}
+                >
+                  {historicalInsight.trendLabel}
+                </Text>
+              </View>
+            </View>
+
+            <View className="mt-4 flex-row gap-3">
+              <View className="flex-1 rounded-xl bg-white/5 p-3">
+                <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Average entry wait</Text>
+                <Text className="mt-1 text-2xl font-black text-white">{historicalInsight.averageEntryWait}m</Text>
+              </View>
+              <View className="flex-1 rounded-xl bg-white/5 p-3">
+                <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Peak entry wait</Text>
+                <Text className="mt-1 text-2xl font-black text-white">{historicalInsight.peakEntryWait}m</Text>
+              </View>
+            </View>
+
+            <View className="mt-4 rounded-2xl bg-white/5 p-4">
+              <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Based on</Text>
+              <Text className="mt-2 text-sm font-bold text-slate-200">
+                {historicalInsight.eventCount} past concerts · {historicalInsight.similarArtistCount} similar artists
+              </Text>
+            </View>
+
+            <WaitTrendChart events={historicalInsight.chartEvents} />
+          </View>
+        ) : null}
       </ScrollView>
 
       <View className="absolute bottom-5 left-5 right-5">

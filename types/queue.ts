@@ -27,6 +27,47 @@ export type PredictionResult = {
   arrivalOffset: ArrivalOffset;
 };
 
+export type HistoricalEvent = {
+  id: string;
+  artist: string;
+  venue: string;
+  date: string;
+  attendanceEstimate: number;
+  monthlyListenersEstimate: number;
+  entryWaitPeak: number;
+  merchWaitPeak: number;
+  parkingWaitPeak: number;
+  averageEntryWait: number;
+  averageMerchWait: number;
+  averageParkingWait: number;
+  artistCategory: string;
+};
+
+export type HistoricalWaitAverages = {
+  averageEntryWait: number;
+  averageMerchWait: number;
+  averageParkingWait: number;
+  peakEntryWait: number;
+  peakMerchWait: number;
+  peakParkingWait: number;
+  eventCount: number;
+};
+
+export type HistoricalTrend = "higher" | "average" | "lighter";
+
+export type HistoricalInsight = {
+  artist: string;
+  venue: string;
+  averageEntryWait: number;
+  peakEntryWait: number;
+  eventCount: number;
+  similarArtistCount: number;
+  trend: HistoricalTrend;
+  trendLabel: string;
+  statement: string;
+  chartEvents: HistoricalEvent[];
+};
+
 export type Venue = {
   id: string;
   name: string;

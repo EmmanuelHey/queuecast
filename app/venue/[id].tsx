@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { EventCard } from "../../components/EventCard";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
+import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { fetchVenueById } from "../../services/queueService";
 import { useQueueStore } from "../../store/useQueueStore";
@@ -14,12 +15,25 @@ export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const venue = useQueueStore((state) => state.venues.find((item) => item.id === id));
   const concerts = useQueueStore((state) => state.concerts);
-  useQuery({ queryKey: ["venue", id], queryFn: () => fetchVenueById(id), enabled: Boolean(id) });
+  const { isLoading } = useQuery({ queryKey: ["venue", id], queryFn: () => fetchVenueById(id), enabled: Boolean(id) });
 
   if (!venue) {
+    if (isLoading) {
+      return (
+        <Screen>
+          <LoadingSkeleton />
+        </Screen>
+      );
+    }
+
     return (
       <Screen>
-        <EmptyState title="Venue unavailable" body="This Dallas venue is not in the current mock launch list." />
+        <EmptyState
+          title="Venue not found"
+          body="This venue is not part of the Dallas demo launch list yet."
+          actionLabel="Back to Home"
+          onAction={() => router.replace("/(tabs)")}
+        />
       </Screen>
     );
   }

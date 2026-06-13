@@ -23,6 +23,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ title: "Welcome" }} />
           <Stack.Screen name="event/[id]" options={{ title: "Event" }} />
           <Stack.Screen name="venue/[id]" options={{ title: "Venue" }} />
           <Stack.Screen name="report/[lineId]" options={{ title: "Report a line" }} />

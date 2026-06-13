@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { EventCard } from "../../components/EventCard";
+import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { useQueueStore } from "../../store/useQueueStore";
 
@@ -18,6 +19,7 @@ const quickFilters = [
 export default function SearchScreen() {
   const [query, setQuery] = useState("");
   const concerts = useQueueStore((state) => state.concerts);
+  const isLoading = false;
   const results = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {
@@ -59,12 +61,19 @@ export default function SearchScreen() {
           );
         })}
       </View>
-      {results.length ? (
+      {isLoading ? (
+        <LoadingSkeleton />
+      ) : results.length ? (
         results.map((concert) => (
           <EventCard key={concert.id} concert={concert} onPress={() => router.push(`/event/${concert.id}`)} />
         ))
       ) : (
-        <EmptyState title="No shows found" body="Try another artist, venue, or city from the current mock schedule." />
+        <EmptyState
+          title="No Dallas shows found"
+          body="Try Dallas, Irving, Deep Ellum, AAC, Dos Equis, or Tonight from the launch schedule."
+          actionLabel="Clear search"
+          onAction={() => setQuery("")}
+        />
       )}
     </Screen>
   );

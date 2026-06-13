@@ -1,4 +1,6 @@
+import { router } from "expo-router";
 import { Text, View } from "react-native";
+import { EmptyState } from "../../components/EmptyState";
 import { Screen } from "../../components/Screen";
 import { useQueueStore } from "../../store/useQueueStore";
 import { ReporterLevel } from "../../types/queue";
@@ -45,6 +47,15 @@ export default function ProfileScreen() {
           Trust grows when your reports come from stronger statuses and mock venue verification.
         </Text>
       </View>
+
+      {reportsSubmitted === 0 ? (
+        <EmptyState
+          title="Start as a Guest Reporter"
+          body="Submit your first line report to unlock a reporter level, verified report count, and helpful score."
+          actionLabel="Find a Dallas show"
+          onAction={() => router.push("/search")}
+        />
+      ) : null}
 
       <View className="mt-5 flex-row gap-3">
         <View className="flex-1 rounded-2xl border border-white/10 bg-panel-soft p-4">

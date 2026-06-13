@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
+import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { colors } from "../../constants/theme";
 import { predictEventLines } from "../../services/predictionService";
@@ -25,14 +26,27 @@ export default function EventDetailScreen() {
   const concert = useQueueStore((state) => state.concerts.find((item) => item.id === id));
   const venue = useQueueStore((state) => state.venues.find((item) => item.id === concert?.venueId));
   const [arrivalOffset, setArrivalOffset] = useState<ArrivalOffset>(30);
-  useQuery({ queryKey: ["concert", id], queryFn: () => fetchConcertById(id), enabled: Boolean(id) });
+  const { isLoading } = useQuery({ queryKey: ["concert", id], queryFn: () => fetchConcertById(id), enabled: Boolean(id) });
   const predictions = useMemo(() => (concert && venue ? predictEventLines(concert, venue, arrivalOffset) : []), [arrivalOffset, concert, venue]);
   const predictionByLineId = Object.fromEntries(predictions.map((prediction) => [prediction.lineId, prediction]));
 
   if (!concert || !venue) {
+    if (isLoading) {
+      return (
+        <Screen>
+          <LoadingSkeleton />
+        </Screen>
+      );
+    }
+
     return (
       <Screen>
-        <EmptyState title="Event unavailable" body="This concert is not in the current mock schedule." />
+        <EmptyState
+          title="Event not found"
+          body="This event is not part of the Dallas demo schedule. Head back to Search to pick a launch event."
+          actionLabel="Search Dallas shows"
+          onAction={() => router.replace("/search")}
+        />
       </Screen>
     );
   }
@@ -119,14 +133,21 @@ export default function EventDetailScreen() {
           <Text className="text-lg font-black text-white">Line estimates</Text>
           <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Trust weighted</Text>
         </View>
-        {concert.lines.map((line) => (
-          <LineEstimateCard
-            key={line.id}
-            line={line}
-            prediction={predictionByLineId[line.id]}
-            onReport={() => router.push(`/report/${line.id}`)}
+        {concert.lines.length ? (
+          concert.lines.map((line) => (
+            <LineEstimateCard
+              key={line.id}
+              line={line}
+              prediction={predictionByLineId[line.id]}
+              onReport={() => router.push(`/report/${line.id}`)}
+            />
+          ))
+        ) : (
+          <EmptyState
+            title="No line reports yet"
+            body="Be the first person to report entry, merch, parking, food, or bathroom waits for this event."
           />
-        ))}
+        )}
       </ScrollView>
 
       <View className="absolute bottom-5 left-5 right-5">

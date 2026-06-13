@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { EventCard } from "../../components/EventCard";
+import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { VenueCard } from "../../components/VenueCard";
 import { fetchConcerts } from "../../services/queueService";
@@ -11,6 +12,7 @@ export default function HomeScreen() {
   const concerts = useQueueStore((state) => state.concerts);
   const venues = useQueueStore((state) => state.venues);
   const { isLoading } = useQuery({ queryKey: ["concerts"], queryFn: fetchConcerts });
+  const highlightedEvent = concerts.find((concert) => concert.status === "Live now") ?? concerts.find((concert) => concert.status === "Doors soon") ?? concerts[0];
 
   return (
     <Screen>
@@ -20,6 +22,16 @@ export default function HomeScreen() {
         <Text className="mt-3 text-base leading-6 text-slate-400">
           Check Dallas-area entry, merch, parking, food, and bathroom waits before the opener starts.
         </Text>
+      </View>
+
+      <View className="mb-5 rounded-2xl border border-primary/30 bg-primary/15 p-5">
+        <Text className="text-2xl font-black text-white">Going to a show tonight?</Text>
+        <Text className="mt-2 text-sm leading-6 text-slate-300">
+          Check entry, merch, parking, food, and bathroom waits before you arrive.
+        </Text>
+        <Pressable onPress={() => router.push("/search")} className="mt-5 self-start rounded-full bg-primary px-5 py-3 active:opacity-80">
+          <Text className="text-xs font-black uppercase tracking-wider text-white">Find Dallas shows</Text>
+        </Pressable>
       </View>
 
       <View className="mb-4 flex-row rounded-2xl border border-white/10 bg-panel p-4">
@@ -35,8 +47,15 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {highlightedEvent ? (
+        <>
+          <Text className="mb-3 text-lg font-black text-white">Tonight in Dallas</Text>
+          <EventCard concert={highlightedEvent} onPress={() => router.push(`/event/${highlightedEvent.id}`)} />
+        </>
+      ) : null}
+
       <Text className="mb-3 text-lg font-black text-white">Nearby Dallas Venues</Text>
-      {venues.map((venue) => (
+      {isLoading ? <LoadingSkeleton count={2} /> : venues.map((venue) => (
         <VenueCard
           key={venue.id}
           venue={venue}
@@ -46,7 +65,7 @@ export default function HomeScreen() {
       ))}
 
       <Text className="mb-3 mt-3 text-lg font-black text-white">{isLoading ? "Tuning in..." : "Dallas launch events"}</Text>
-      {concerts.map((concert) => (
+      {isLoading ? <LoadingSkeleton /> : concerts.map((concert) => (
         <EventCard key={concert.id} concert={concert} onPress={() => router.push(`/event/${concert.id}`)} />
       ))}
     </Screen>

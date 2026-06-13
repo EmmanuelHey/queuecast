@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { router } from "expo-router";
 import { Text, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { Screen } from "../../components/Screen";
@@ -37,7 +38,14 @@ export default function ActivityScreen() {
         <Text className="mt-1 text-sm font-bold uppercase tracking-wider text-primary-soft">reports submitted this session</Text>
       </View>
 
-      {recentReports.length ? (
+      {reportsSubmitted === 0 ? (
+        <EmptyState
+          title="No reports from you yet"
+          body="Submit a quick line report during the demo to see your report appear here with trust and verification details."
+          actionLabel="Find a show"
+          onAction={() => router.push("/search")}
+        />
+      ) : recentReports.length ? (
         recentReports.map((report) => (
           <View key={report.id} className="mb-3 rounded-2xl border border-white/10 bg-panel p-4">
             <View className="flex-row items-center justify-between">

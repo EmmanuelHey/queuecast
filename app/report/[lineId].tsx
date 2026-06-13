@@ -29,6 +29,7 @@ export default function ReportScreen() {
   const [waitMinutes, setWaitMinutes] = useState(lineContext.line?.waitMinutes ?? 15);
   const [crowdLevel, setCrowdLevel] = useState<CrowdLevel>(lineContext.line?.crowdLevel ?? "Steady");
   const [reporterStatus, setReporterStatus] = useState<ReporterStatus>("in_line");
+  const [submittedSummary, setSubmittedSummary] = useState<{ trustScore: number; waitMinutes: number } | null>(null);
   const verificationStatus = getVerificationStatus(reporterStatus, isNearVenue);
   const trustScore = getTrustScore(reporterStatus, isNearVenue, Date.now());
 
@@ -46,8 +47,37 @@ export default function ReportScreen() {
     submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue });
     queryClient.invalidateQueries({ queryKey: ["concerts"] });
     queryClient.invalidateQueries({ queryKey: ["concert", concert.id] });
-    router.back();
+    setSubmittedSummary({ trustScore, waitMinutes });
   };
+
+  if (submittedSummary) {
+    const updatedConcert = concerts.find((item) => item.id === concert.id);
+    const updatedLine = updatedConcert?.lines.find((item) => item.id === line.id);
+
+    return (
+      <Screen>
+        <View className="mt-10 rounded-2xl border border-primary/30 bg-primary/15 p-6">
+          <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">Report submitted</Text>
+          <Text className="mt-3 text-3xl font-black text-white">Thanks for helping the line move smarter.</Text>
+          <Text className="mt-3 text-sm leading-6 text-slate-300">
+            Your {getReporterStatusLabel(reporterStatus).toLowerCase()} report added {submittedSummary.trustScore} trust points.
+          </Text>
+        </View>
+
+        <View className="mt-5 rounded-2xl border border-white/10 bg-panel p-5">
+          <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Updated estimate</Text>
+          <Text className="mt-2 text-4xl font-black text-white">{updatedLine?.waitMinutes ?? submittedSummary.waitMinutes} min</Text>
+          <Text className="mt-2 text-sm text-slate-400">
+            {updatedLine?.type ?? line.type} line at {concert.venue}
+          </Text>
+        </View>
+
+        <Pressable onPress={() => router.replace(`/event/${concert.id}`)} className="mt-6 rounded-2xl bg-primary py-5 active:opacity-80">
+          <Text className="text-center text-base font-black uppercase tracking-wider text-white">Back to event</Text>
+        </Pressable>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>

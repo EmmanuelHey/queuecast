@@ -1,10 +1,19 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { EventCard } from "../../components/EventCard";
 import { Screen } from "../../components/Screen";
 import { useQueueStore } from "../../store/useQueueStore";
+
+const quickFilters = [
+  { label: "Dallas", value: "dallas" },
+  { label: "Irving", value: "irving" },
+  { label: "Deep Ellum", value: "deep ellum" },
+  { label: "AAC", value: "american airlines center" },
+  { label: "Dos Equis", value: "dos equis" },
+  { label: "Tonight", value: "tonight" },
+];
 
 export default function SearchScreen() {
   const [query, setQuery] = useState("");
@@ -16,7 +25,7 @@ export default function SearchScreen() {
     }
 
     return concerts.filter((concert) =>
-      [concert.artist, concert.venue, concert.city].some((field) => field.toLowerCase().includes(normalized)),
+      [concert.artist, concert.venue, concert.city, concert.status].some((field) => field.toLowerCase().includes(normalized)),
     );
   }, [concerts, query]);
 
@@ -24,15 +33,32 @@ export default function SearchScreen() {
     <Screen>
       <View className="pb-5 pt-3">
         <Text className="text-3xl font-black text-white">Search</Text>
-        <Text className="mt-2 text-base text-slate-400">Find an artist, venue, or city.</Text>
+        <Text className="mt-2 text-base text-slate-400">Find a Dallas artist, venue, city, or tonight's shows.</Text>
       </View>
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Search concerts"
+        placeholder="Search artist, venue, or city"
         placeholderTextColor="#7C708C"
-        className="mb-5 rounded-2xl border border-white/10 bg-panel px-4 py-4 text-base font-semibold text-white"
+        className="mb-4 rounded-2xl border border-white/10 bg-panel px-4 py-4 text-base font-semibold text-white"
       />
+      <View className="mb-5 flex-row flex-wrap gap-2">
+        {quickFilters.map((filter) => {
+          const selected = query.toLowerCase() === filter.value;
+
+          return (
+            <Pressable
+              key={filter.value}
+              onPress={() => setQuery(selected ? "" : filter.value)}
+              className={`rounded-full border px-4 py-2 ${selected ? "border-primary bg-primary" : "border-white/10 bg-panel-soft"}`}
+            >
+              <Text className={`text-xs font-black uppercase tracking-wider ${selected ? "text-white" : "text-slate-300"}`}>
+                {filter.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       {results.length ? (
         results.map((concert) => (
           <EventCard key={concert.id} concert={concert} onPress={() => router.push(`/event/${concert.id}`)} />

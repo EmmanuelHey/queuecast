@@ -29,10 +29,18 @@ export default function EventDetailScreen() {
       <ScrollView className="flex-1" contentContainerClassName="px-5 pb-28" showsVerticalScrollIndicator={false}>
         <View className="pb-6 pt-3">
           <View className="mb-5 h-2 w-24 rounded-full" style={{ backgroundColor: concert.accent }} />
-          <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">{concert.date}</Text>
+          <View className="flex-row flex-wrap items-center gap-2">
+            <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">{concert.date}</Text>
+            <View className="rounded-full bg-primary/20 px-3 py-1.5">
+              <Text className="text-xs font-black uppercase tracking-wider text-primary-soft">{concert.status}</Text>
+            </View>
+          </View>
           <Text className="mt-3 text-4xl font-black leading-tight text-white">{concert.artist}</Text>
           <Text className="mt-3 text-lg font-bold text-slate-200">{concert.venue}</Text>
           <Text className="mt-1 text-base text-slate-500">{concert.city}</Text>
+          <Pressable onPress={() => router.push(`/venue/${concert.venueId}`)} className="mt-4 self-start rounded-full bg-white/10 px-4 py-2">
+            <Text className="text-xs font-black uppercase tracking-wider text-slate-200">View venue</Text>
+          </Pressable>
         </View>
 
         <View className="mb-5 rounded-2xl border border-white/10 bg-panel p-4">

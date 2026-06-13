@@ -3,20 +3,22 @@ import { router } from "expo-router";
 import { Text, View } from "react-native";
 import { EventCard } from "../../components/EventCard";
 import { Screen } from "../../components/Screen";
+import { VenueCard } from "../../components/VenueCard";
 import { fetchConcerts } from "../../services/queueService";
 import { useQueueStore } from "../../store/useQueueStore";
 
 export default function HomeScreen() {
   const concerts = useQueueStore((state) => state.concerts);
+  const venues = useQueueStore((state) => state.venues);
   const { isLoading } = useQuery({ queryKey: ["concerts"], queryFn: fetchConcerts });
 
   return (
     <Screen>
       <View className="pb-5 pt-3">
         <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">QueueCast</Text>
-        <Text className="mt-3 text-4xl font-black leading-tight text-white">Live lines for tonight's shows</Text>
+        <Text className="mt-3 text-4xl font-black leading-tight text-white">Dallas concert lines, live</Text>
         <Text className="mt-3 text-base leading-6 text-slate-400">
-          Check entry, merch, parking, food, and bathroom waits before the opener starts.
+          Check Dallas-area entry, merch, parking, food, and bathroom waits before the opener starts.
         </Text>
       </View>
 
@@ -33,7 +35,17 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Text className="mb-3 text-lg font-black text-white">{isLoading ? "Tuning in..." : "Nearby concerts"}</Text>
+      <Text className="mb-3 text-lg font-black text-white">Nearby Dallas Venues</Text>
+      {venues.map((venue) => (
+        <VenueCard
+          key={venue.id}
+          venue={venue}
+          eventCount={concerts.filter((concert) => concert.venueId === venue.id).length}
+          onPress={() => router.push(`/venue/${venue.id}`)}
+        />
+      ))}
+
+      <Text className="mb-3 mt-3 text-lg font-black text-white">{isLoading ? "Tuning in..." : "Dallas launch events"}</Text>
       {concerts.map((concert) => (
         <EventCard key={concert.id} concert={concert} onPress={() => router.push(`/event/${concert.id}`)} />
       ))}

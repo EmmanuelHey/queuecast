@@ -2,10 +2,12 @@ import {
   ConfidenceLevel,
   Concert,
   CrowdLevel,
+  EventStatus,
   LineEstimate,
   LineReport,
   LineType,
   ReporterStatus,
+  Venue,
   VerificationStatus,
 } from "../types/queue";
 
@@ -23,6 +25,118 @@ type LineSeed = {
   type: LineType;
   reports: SeedReport[];
 };
+
+type EventSeed = {
+  id: string;
+  venueId: string;
+  artist: string;
+  date: string;
+  dayOffset: number;
+  doorsTime: string;
+  showTime: string;
+  doorsMinutes: number;
+  showMinutes: number;
+  endMinutes: number;
+  accent: string;
+  lineWaits: Record<LineType, number[]>;
+};
+
+const MOCK_NOW_MINUTES = 19 * 60 + 10;
+
+export const mockVenues: Venue[] = [
+  {
+    id: "american-airlines-center",
+    name: "American Airlines Center",
+    city: "Dallas",
+    capacity: 20000,
+    address: "2500 Victory Ave, Dallas, TX 75219",
+    defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
+    entryPointsCount: 6,
+    typicalBottleneckNotes: [
+      "Victory Plaza entry stacks up closest to showtime.",
+      "Parking queues build around the garage exits after 6 PM.",
+      "Merch waits spike on the main concourse before the opener.",
+    ],
+  },
+  {
+    id: "dos-equis-pavilion",
+    name: "Dos Equis Pavilion",
+    city: "Dallas",
+    capacity: 20000,
+    address: "3839 S Fitzhugh Ave, Dallas, TX 75210",
+    defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
+    entryPointsCount: 4,
+    typicalBottleneckNotes: [
+      "Fair Park parking can create long walk-in waves.",
+      "Entry lines move fastest right after doors open.",
+      "Food and drink stands bunch up between openers.",
+    ],
+  },
+  {
+    id: "toyota-music-factory",
+    name: "Toyota Music Factory",
+    city: "Irving",
+    capacity: 8000,
+    address: "316 W Las Colinas Blvd, Irving, TX 75039",
+    defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
+    entryPointsCount: 3,
+    typicalBottleneckNotes: [
+      "Garage traffic is the biggest pressure point.",
+      "Restaurant foot traffic can slow the plaza entrance.",
+      "Merch lines are usually compact but dense.",
+    ],
+  },
+  {
+    id: "house-of-blues-dallas",
+    name: "House of Blues Dallas",
+    city: "Dallas",
+    capacity: 1625,
+    address: "2200 N Lamar St, Dallas, TX 75202",
+    defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
+    entryPointsCount: 2,
+    typicalBottleneckNotes: [
+      "The main entrance line wraps quickly on sold-out club nights.",
+      "Restaurant and music-hall traffic overlap near doors.",
+      "Bathroom waits spike immediately after the headliner starts.",
+    ],
+  },
+  {
+    id: "the-factory-deep-ellum",
+    name: "The Factory in Deep Ellum",
+    city: "Deep Ellum",
+    capacity: 4300,
+    address: "2713 Canton St, Dallas, TX 75226",
+    defaultLineTypes: ["Entry", "Merch", "Parking", "Food", "Bathrooms"],
+    entryPointsCount: 3,
+    typicalBottleneckNotes: [
+      "Deep Ellum street parking creates uneven arrival bursts.",
+      "Entry gets tight when nearby venues let out.",
+      "Merch lines tend to stay active after the main set.",
+    ],
+  },
+];
+
+const venueById = Object.fromEntries(mockVenues.map((venue) => [venue.id, venue]));
+
+export function getEventStatus(seed: Pick<EventSeed, "dayOffset" | "doorsMinutes" | "showMinutes" | "endMinutes">): EventStatus {
+  if (seed.dayOffset < 0 || (seed.dayOffset === 0 && MOCK_NOW_MINUTES > seed.endMinutes)) {
+    return "Ended";
+  }
+
+  if (seed.dayOffset > 0) {
+    return "Upcoming";
+  }
+
+  if (MOCK_NOW_MINUTES >= seed.showMinutes && MOCK_NOW_MINUTES <= seed.endMinutes) {
+    return "Live now";
+  }
+
+  if (MOCK_NOW_MINUTES >= seed.doorsMinutes - 60 && MOCK_NOW_MINUTES < seed.showMinutes) {
+    return "Doors soon";
+  }
+
+  return "Tonight";
+}
 
 export function getVerificationStatus(reporterStatus: ReporterStatus, isNearVenue: boolean): VerificationStatus {
   if (reporterStatus === "on_the_way") {
@@ -162,155 +276,183 @@ export function recalculateLineEstimate(lineEstimate: LineEstimate): LineEstimat
   };
 }
 
-const line = (id: string, eventId: string, type: LineType, reports: SeedReport[]): LineEstimate =>
-  createLineEstimate({ id, eventId, type, reports });
+const reportSet = (baseWait: number): Record<LineType, SeedReport[]> => ({
+  Entry: [
+    { waitMinutes: baseWait, crowdLevel: baseWait >= 25 ? "Packed" : "Steady", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 4 },
+    { waitMinutes: Math.max(4, baseWait - 4), crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 9 },
+  ],
+  Merch: [
+    { waitMinutes: Math.max(6, baseWait - 2), crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 11 },
+    { waitMinutes: baseWait + 3, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 18 },
+  ],
+  Parking: [
+    { waitMinutes: baseWait + 8, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 7 },
+    { waitMinutes: baseWait + 2, crowdLevel: "Steady", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 21 },
+  ],
+  Food: [
+    { waitMinutes: Math.max(5, baseWait - 10), crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 6 },
+  ],
+  Bathrooms: [
+    { waitMinutes: Math.max(4, baseWait - 13), crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 5 },
+  ],
+});
+
+const createLines = (eventId: string, waits: Record<LineType, number[]>): LineEstimate[] =>
+  (Object.keys(waits) as LineType[]).map((type) =>
+    createLineEstimate({
+      id: `${eventId}-${type.toLowerCase()}`,
+      eventId,
+      type,
+      reports: waits[type].map((waitMinutes, index) => ({
+        waitMinutes,
+        crowdLevel: waitMinutes >= 25 ? "Packed" : waitMinutes >= 12 ? "Steady" : "Light",
+        reporterStatus: index === 0 ? "in_line" : index === 1 ? "inside" : "just_checking",
+        isNearVenue: index !== 2,
+        submittedMinutesAgo: [3, 8, 16][index] ?? 20,
+      })),
+    }),
+  );
+
+const createEvent = (seed: EventSeed): Concert => {
+  const venue = venueById[seed.venueId];
+
+  return {
+    id: seed.id,
+    venueId: seed.venueId,
+    artist: seed.artist,
+    venue: venue.name,
+    city: venue.city,
+    date: seed.date,
+    doorsTime: seed.doorsTime,
+    showTime: seed.showTime,
+    status: getEventStatus(seed),
+    accent: seed.accent,
+    lines: createLines(seed.id, seed.lineWaits),
+  };
+};
+
+const waits = (baseWait: number) => {
+  const reports = reportSet(baseWait);
+  return {
+    Entry: reports.Entry.map((report) => report.waitMinutes),
+    Merch: reports.Merch.map((report) => report.waitMinutes),
+    Parking: reports.Parking.map((report) => report.waitMinutes),
+    Food: reports.Food.map((report) => report.waitMinutes),
+    Bathrooms: reports.Bathrooms.map((report) => report.waitMinutes),
+  };
+};
 
 export const mockConcerts: Concert[] = [
-  {
-    id: "solara",
-    artist: "Solara Voss",
-    venue: "The Anthem",
-    city: "Washington, DC",
-    date: "Sat, Jun 20",
+  createEvent({
+    id: "aac-skyline-mode",
+    venueId: "american-airlines-center",
+    artist: "Skyline Mode",
+    date: "Tonight",
+    dayOffset: 0,
     doorsTime: "6:30 PM",
     showTime: "8:00 PM",
+    doorsMinutes: 18 * 60 + 30,
+    showMinutes: 20 * 60,
+    endMinutes: 23 * 60,
     accent: "#8B5CF6",
-    lines: [
-      line("solara-entry", "solara", "Entry", [
-        { waitMinutes: 18, crowdLevel: "Steady", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 4 },
-        { waitMinutes: 22, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: false, submittedMinutesAgo: 12 },
-        { waitMinutes: 15, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 8 },
-      ]),
-      line("solara-merch", "solara", "Merch", [
-        { waitMinutes: 24, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 8 },
-        { waitMinutes: 18, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 16 },
-      ]),
-      line("solara-parking", "solara", "Parking", [
-        { waitMinutes: 14, crowdLevel: "Steady", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 11 },
-        { waitMinutes: 20, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 19 },
-      ]),
-      line("solara-food", "solara", "Food", [
-        { waitMinutes: 9, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 6 },
-        { waitMinutes: 11, crowdLevel: "Steady", reporterStatus: "just_checking", isNearVenue: true, submittedMinutesAgo: 14 },
-      ]),
-      line("solara-bathrooms", "solara", "Bathrooms", [
-        { waitMinutes: 6, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 3 },
-        { waitMinutes: 8, crowdLevel: "Light", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 17 },
-      ]),
-    ],
-  },
-  {
-    id: "neon-pines",
-    artist: "Neon Pines",
-    venue: "Red Rocks Amphitheatre",
-    city: "Morrison, CO",
-    date: "Fri, Jun 26",
-    doorsTime: "5:45 PM",
-    showTime: "7:15 PM",
-    accent: "#06B6D4",
-    lines: [
-      line("neon-entry", "neon-pines", "Entry", [
-        { waitMinutes: 32, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 2 },
-        { waitMinutes: 38, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 7 },
-      ]),
-      line("neon-merch", "neon-pines", "Merch", [
-        { waitMinutes: 17, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 10 },
-        { waitMinutes: 21, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 23 },
-      ]),
-      line("neon-parking", "neon-pines", "Parking", [
-        { waitMinutes: 41, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 5 },
-        { waitMinutes: 35, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: false, submittedMinutesAgo: 18 },
-      ]),
-      line("neon-food", "neon-pines", "Food", [
-        { waitMinutes: 12, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 12 },
-      ]),
-      line("neon-bathrooms", "neon-pines", "Bathrooms", [
-        { waitMinutes: 7, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 7 },
-      ]),
-    ],
-  },
-  {
-    id: "velvet-static",
-    artist: "Velvet Static",
-    venue: "Brooklyn Steel",
-    city: "Brooklyn, NY",
-    date: "Sun, Jun 28",
-    doorsTime: "7:00 PM",
-    showTime: "8:30 PM",
-    accent: "#F472B6",
-    lines: [
-      line("velvet-entry", "velvet-static", "Entry", [
-        { waitMinutes: 11, crowdLevel: "Light", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 5 },
-        { waitMinutes: 13, crowdLevel: "Steady", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 15 },
-      ]),
-      line("velvet-merch", "velvet-static", "Merch", [
-        { waitMinutes: 19, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 13 },
-      ]),
-      line("velvet-parking", "velvet-static", "Parking", [
-        { waitMinutes: 8, crowdLevel: "Light", reporterStatus: "on_the_way", isNearVenue: false, submittedMinutesAgo: 15 },
-      ]),
-      line("velvet-food", "velvet-static", "Food", [
-        { waitMinutes: 15, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 9 },
-      ]),
-      line("velvet-bathrooms", "velvet-static", "Bathrooms", [
-        { waitMinutes: 10, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 4 },
-      ]),
-    ],
-  },
-  {
-    id: "atlas-wave",
-    artist: "Atlas Wave",
-    venue: "Moody Center",
-    city: "Austin, TX",
-    date: "Thu, Jul 2",
-    doorsTime: "6:00 PM",
-    showTime: "7:30 PM",
-    accent: "#34D399",
-    lines: [
-      line("atlas-entry", "atlas-wave", "Entry", [
-        { waitMinutes: 25, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 3 },
-        { waitMinutes: 29, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 6 },
-      ]),
-      line("atlas-merch", "atlas-wave", "Merch", [
-        { waitMinutes: 12, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 16 },
-      ]),
-      line("atlas-parking", "atlas-wave", "Parking", [
-        { waitMinutes: 29, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 6 },
-      ]),
-      line("atlas-food", "atlas-wave", "Food", [
-        { waitMinutes: 7, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 8 },
-      ]),
-      line("atlas-bathrooms", "atlas-wave", "Bathrooms", [
-        { waitMinutes: 5, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 6 },
-      ]),
-    ],
-  },
-  {
-    id: "luna-circuit",
-    artist: "Luna Circuit",
-    venue: "Hollywood Bowl",
-    city: "Los Angeles, CA",
-    date: "Sat, Jul 11",
+    lineWaits: waits(22),
+  }),
+  createEvent({
+    id: "dos-equis-neon-country",
+    venueId: "dos-equis-pavilion",
+    artist: "Neon Country Revival",
+    date: "Tonight",
+    dayOffset: 0,
     doorsTime: "5:30 PM",
     showTime: "7:00 PM",
+    doorsMinutes: 17 * 60 + 30,
+    showMinutes: 19 * 60,
+    endMinutes: 22 * 60 + 30,
+    accent: "#22C55E",
+    lineWaits: waits(31),
+  }),
+  createEvent({
+    id: "hob-luna-circuit",
+    venueId: "house-of-blues-dallas",
+    artist: "Luna Circuit",
+    date: "Tonight",
+    dayOffset: 0,
+    doorsTime: "8:00 PM",
+    showTime: "9:00 PM",
+    doorsMinutes: 20 * 60,
+    showMinutes: 21 * 60,
+    endMinutes: 23 * 60 + 30,
+    accent: "#F472B6",
+    lineWaits: waits(9),
+  }),
+  createEvent({
+    id: "factory-velvet-static",
+    venueId: "the-factory-deep-ellum",
+    artist: "Velvet Static",
+    date: "Tonight",
+    dayOffset: 0,
+    doorsTime: "6:00 PM",
+    showTime: "7:15 PM",
+    doorsMinutes: 18 * 60,
+    showMinutes: 19 * 60 + 15,
+    endMinutes: 22 * 60 + 15,
+    accent: "#06B6D4",
+    lineWaits: waits(18),
+  }),
+  createEvent({
+    id: "tmf-atlas-wave",
+    venueId: "toyota-music-factory",
+    artist: "Atlas Wave",
+    date: "Fri, Jun 27",
+    dayOffset: 1,
+    doorsTime: "6:00 PM",
+    showTime: "7:30 PM",
+    doorsMinutes: 18 * 60,
+    showMinutes: 19 * 60 + 30,
+    endMinutes: 22 * 60 + 30,
     accent: "#FBBF24",
-    lines: [
-      line("luna-entry", "luna-circuit", "Entry", [
-        { waitMinutes: 22, crowdLevel: "Steady", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 1 },
-        { waitMinutes: 26, crowdLevel: "Packed", reporterStatus: "just_checking", isNearVenue: false, submittedMinutesAgo: 18 },
-      ]),
-      line("luna-merch", "luna-circuit", "Merch", [
-        { waitMinutes: 28, crowdLevel: "Packed", reporterStatus: "in_line", isNearVenue: true, submittedMinutesAgo: 9 },
-      ]),
-      line("luna-parking", "luna-circuit", "Parking", [
-        { waitMinutes: 36, crowdLevel: "Packed", reporterStatus: "on_the_way", isNearVenue: true, submittedMinutesAgo: 4 },
-      ]),
-      line("luna-food", "luna-circuit", "Food", [
-        { waitMinutes: 13, crowdLevel: "Steady", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 7 },
-      ]),
-      line("luna-bathrooms", "luna-circuit", "Bathrooms", [
-        { waitMinutes: 9, crowdLevel: "Light", reporterStatus: "inside", isNearVenue: true, submittedMinutesAgo: 10 },
-      ]),
-    ],
-  },
+    lineWaits: waits(16),
+  }),
+  createEvent({
+    id: "aac-solara-voss",
+    venueId: "american-airlines-center",
+    artist: "Solara Voss",
+    date: "Sat, Jun 28",
+    dayOffset: 2,
+    doorsTime: "6:00 PM",
+    showTime: "7:45 PM",
+    doorsMinutes: 18 * 60,
+    showMinutes: 19 * 60 + 45,
+    endMinutes: 22 * 60 + 45,
+    accent: "#A78BFA",
+    lineWaits: waits(24),
+  }),
+  createEvent({
+    id: "deep-ellum-midnight-tapes",
+    venueId: "the-factory-deep-ellum",
+    artist: "Midnight Tapes",
+    date: "Sun, Jun 29",
+    dayOffset: 3,
+    doorsTime: "7:00 PM",
+    showTime: "8:30 PM",
+    doorsMinutes: 19 * 60,
+    showMinutes: 20 * 60 + 30,
+    endMinutes: 23 * 60,
+    accent: "#FB7185",
+    lineWaits: waits(13),
+  }),
+  createEvent({
+    id: "hob-oak-cliff-soul",
+    venueId: "house-of-blues-dallas",
+    artist: "Oak Cliff Soul Club",
+    date: "Yesterday",
+    dayOffset: -1,
+    doorsTime: "6:30 PM",
+    showTime: "8:00 PM",
+    doorsMinutes: 18 * 60 + 30,
+    showMinutes: 20 * 60,
+    endMinutes: 22 * 60 + 30,
+    accent: "#34D399",
+    lineWaits: waits(7),
+  }),
 ];

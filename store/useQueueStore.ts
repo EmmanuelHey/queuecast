@@ -1,15 +1,17 @@
 import { create } from "zustand";
-import { getTrustScore, getVerificationStatus, mockConcerts, recalculateLineEstimate } from "../data/mockConcerts";
-import { Concert, LineEstimate, LineReport, LineReportInput } from "../types/queue";
+import { getTrustScore, getVerificationStatus, mockConcerts, mockVenues, recalculateLineEstimate } from "../data/mockConcerts";
+import { Concert, LineEstimate, LineReport, LineReportInput, Venue } from "../types/queue";
 
 type QueueState = {
   concerts: Concert[];
+  venues: Venue[];
   reportsSubmitted: number;
   verifiedReportsSubmitted: number;
   isNearVenue: boolean;
   submitReport: (report: LineReportInput) => void;
   getConcertById: (id: string) => Concert | undefined;
   getLineById: (lineId: string) => LineEstimate | undefined;
+  getVenueById: (id: string) => Venue | undefined;
 };
 
 const nowLabel = () => "just now";
@@ -33,6 +35,7 @@ const createSubmittedReport = (report: LineReportInput, index: number): LineRepo
 
 export const useQueueStore = create<QueueState>((set, get) => ({
   concerts: mockConcerts,
+  venues: mockVenues,
   reportsSubmitted: 0,
   verifiedReportsSubmitted: 0,
   isNearVenue: true,
@@ -65,4 +68,5 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     get()
       .concerts.flatMap((concert) => concert.lines)
       .find((line) => line.id === lineId),
+  getVenueById: (id) => get().venues.find((venue) => venue.id === id),
 }));

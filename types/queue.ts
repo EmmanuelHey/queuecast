@@ -10,6 +10,19 @@ export type ConfidenceLevel = "Low" | "Medium" | "High";
 
 export type ReporterLevel = "Guest Reporter" | "Bronze Reporter" | "Silver Reporter" | "Gold Reporter" | "Venue Expert";
 
+export type EventStatus = "Tonight" | "Upcoming" | "Doors soon" | "Live now" | "Ended";
+
+export type Venue = {
+  id: string;
+  name: string;
+  city: string;
+  capacity: number;
+  address: string;
+  defaultLineTypes: LineType[];
+  entryPointsCount: number;
+  typicalBottleneckNotes: string[];
+};
+
 export type LineReport = {
   id: string;
   lineId: string;
@@ -39,12 +52,14 @@ export type LineEstimate = {
 
 export type Concert = {
   id: string;
+  venueId: string;
   artist: string;
   venue: string;
   city: string;
   date: string;
   doorsTime: string;
   showTime: string;
+  status: EventStatus;
   accent: string;
   lines: LineEstimate[];
 };

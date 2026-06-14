@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { Screen } from "../../components/Screen";
 import { useQueueStore } from "../../store/useQueueStore";
@@ -47,6 +47,13 @@ export default function ProfileScreen() {
           Trust grows when your reports come from stronger statuses and mock venue verification.
         </Text>
       </View>
+
+      <Pressable onPress={() => router.push("/operator")} className="mt-5 rounded-2xl border border-primary/30 bg-primary/15 p-5 active:opacity-80">
+        <Text className="text-xl font-black text-white">Venue Operator Demo</Text>
+        <Text className="mt-2 text-sm leading-6 text-slate-300">
+          See how QueueCast could help venues monitor line pressure, alerts, and staffing actions.
+        </Text>
+      </Pressable>
 
       {reportsSubmitted === 0 ? (
         <EmptyState

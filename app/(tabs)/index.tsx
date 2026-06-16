@@ -5,14 +5,22 @@ import { EventCard } from "../../components/EventCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { VenueCard } from "../../components/VenueCard";
-import { fetchConcerts } from "../../services/queueService";
+import { getEvents, getVenues } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 
 export default function HomeScreen() {
-  const concerts = useQueueStore((state) => state.concerts);
-  const venues = useQueueStore((state) => state.venues);
-  const { isLoading } = useQuery({ queryKey: ["concerts"], queryFn: fetchConcerts });
+  const fallbackConcerts = useQueueStore((state) => state.concerts);
+  const fallbackVenues = useQueueStore((state) => state.venues);
+  const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
+  const venuesQuery = useQuery({ queryKey: ["supabase", "venues"], queryFn: getVenues, enabled: isSupabaseConfigured });
+  const concerts = eventsQuery.data ?? fallbackConcerts;
+  const venues = venuesQuery.data ?? fallbackVenues;
+  const isLoading = eventsQuery.isLoading || venuesQuery.isLoading;
   const highlightedEvent = concerts.find((concert) => concert.status === "Live now") ?? concerts.find((concert) => concert.status === "Doors soon") ?? concerts[0];
+  const averageEntryWait = concerts.length
+    ? Math.round(concerts.reduce((sum, concert) => sum + (concert.lines[0]?.waitMinutes ?? 0), 0) / concerts.length)
+    : 0;
 
   return (
     <Screen>
@@ -40,9 +48,7 @@ export default function HomeScreen() {
           <Text className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">tracked events</Text>
         </View>
         <View className="flex-1">
-          <Text className="text-2xl font-black text-white">
-            {Math.round(concerts.reduce((sum, concert) => sum + (concert.lines[0]?.waitMinutes ?? 0), 0) / concerts.length)}
-          </Text>
+          <Text className="text-2xl font-black text-white">{averageEntryWait}</Text>
           <Text className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">avg entry min</Text>
         </View>
       </View>

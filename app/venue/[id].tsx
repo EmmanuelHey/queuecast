@@ -6,16 +6,25 @@ import { EventCard } from "../../components/EventCard";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
-import { fetchVenueById } from "../../services/queueService";
+import { getEvents, getVenueById } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 
 const activeStatuses = ["Doors soon", "Live now"];
 
 export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const venue = useQueueStore((state) => state.venues.find((item) => item.id === id));
-  const concerts = useQueueStore((state) => state.concerts);
-  const { isLoading } = useQuery({ queryKey: ["venue", id], queryFn: () => fetchVenueById(id), enabled: Boolean(id) });
+  const fallbackVenue = useQueueStore((state) => state.venues.find((item) => item.id === id));
+  const fallbackConcerts = useQueueStore((state) => state.concerts);
+  const venueQuery = useQuery({
+    queryKey: ["supabase", "venue", id],
+    queryFn: () => getVenueById(id),
+    enabled: isSupabaseConfigured && Boolean(id),
+  });
+  const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
+  const venue = venueQuery.data ?? fallbackVenue;
+  const concerts = eventsQuery.data ?? fallbackConcerts;
+  const isLoading = venueQuery.isLoading || eventsQuery.isLoading;
 
   if (!venue) {
     if (isLoading) {

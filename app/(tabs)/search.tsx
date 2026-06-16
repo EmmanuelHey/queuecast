@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -5,6 +6,8 @@ import { EmptyState } from "../../components/EmptyState";
 import { EventCard } from "../../components/EventCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
+import { getEvents } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 
 const quickFilters = [
@@ -18,8 +21,10 @@ const quickFilters = [
 
 export default function SearchScreen() {
   const [query, setQuery] = useState("");
-  const concerts = useQueueStore((state) => state.concerts);
-  const isLoading = false;
+  const fallbackConcerts = useQueueStore((state) => state.concerts);
+  const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
+  const concerts = eventsQuery.data ?? fallbackConcerts;
+  const isLoading = eventsQuery.isLoading;
   const results = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {

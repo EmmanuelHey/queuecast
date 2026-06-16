@@ -11,7 +11,8 @@ import { WaitTrendChart } from "../../components/WaitTrendChart";
 import { colors } from "../../constants/theme";
 import { getHistoricalInsightForEvent } from "../../services/historicalService";
 import { predictEventLines } from "../../services/predictionService";
-import { fetchConcertById } from "../../services/queueService";
+import { getEventById, getVenueById } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 import { ArrivalOffset } from "../../types/queue";
 
@@ -25,10 +26,23 @@ const arrivalOptions: Array<{ label: string; value: ArrivalOffset }> = [
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const concert = useQueueStore((state) => state.concerts.find((item) => item.id === id));
-  const venue = useQueueStore((state) => state.venues.find((item) => item.id === concert?.venueId));
+  const fallbackConcert = useQueueStore((state) => state.concerts.find((item) => item.id === id));
+  const fallbackVenues = useQueueStore((state) => state.venues);
   const [arrivalOffset, setArrivalOffset] = useState<ArrivalOffset>(30);
-  const { isLoading } = useQuery({ queryKey: ["concert", id], queryFn: () => fetchConcertById(id), enabled: Boolean(id) });
+  const eventQuery = useQuery({
+    queryKey: ["supabase", "event", id],
+    queryFn: () => getEventById(id),
+    enabled: isSupabaseConfigured && Boolean(id),
+  });
+  const concert = eventQuery.data ?? fallbackConcert;
+  const fallbackVenue = fallbackVenues.find((item) => item.id === concert?.venueId);
+  const venueQuery = useQuery({
+    queryKey: ["supabase", "venue", concert?.venueId],
+    queryFn: () => getVenueById(concert?.venueId ?? ""),
+    enabled: isSupabaseConfigured && Boolean(concert?.venueId),
+  });
+  const venue = venueQuery.data ?? fallbackVenue;
+  const isLoading = eventQuery.isLoading || venueQuery.isLoading;
   const predictions = useMemo(() => (concert && venue ? predictEventLines(concert, venue, arrivalOffset) : []), [arrivalOffset, concert, venue]);
   const predictionByLineId = Object.fromEntries(predictions.map((prediction) => [prediction.lineId, prediction]));
   const historicalInsight = useMemo(() => (concert ? getHistoricalInsightForEvent(concert) : null), [concert]);

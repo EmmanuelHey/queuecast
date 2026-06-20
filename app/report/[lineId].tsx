@@ -2,11 +2,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { AuthRequiredCard } from "../../components/AuthRequiredCard";
 import { EmptyState } from "../../components/EmptyState";
+import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { OptionPill } from "../../components/OptionPill";
 import { Screen } from "../../components/Screen";
 import { lineWaitOptions } from "../../constants/theme";
 import { getReporterStatusLabel, getTrustScore, getVerificationLabel, getVerificationStatus } from "../../data/mockConcerts";
+import { useAuth } from "../../hooks/useAuth";
 import { verifyNearVenue } from "../../services/locationService";
 import { useQueueStore } from "../../store/useQueueStore";
 import { CrowdLevel, LocationPermissionStatus, LocationVerificationState, ReporterStatus } from "../../types/queue";
@@ -16,6 +19,7 @@ const reporterStatuses: ReporterStatus[] = ["in_line", "on_the_way", "inside", "
 
 export default function ReportScreen() {
   const { lineId } = useLocalSearchParams<{ lineId: string }>();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
   const concerts = useQueueStore((state) => state.concerts);
   const venues = useQueueStore((state) => state.venues);
@@ -40,6 +44,22 @@ export default function ReportScreen() {
   const effectiveIsNearVenue = isRealLocationVerified || (locationVerification === "idle" && isNearVenue);
   const verificationStatus = getVerificationStatus(reporterStatus, effectiveIsNearVenue);
   const trustScore = getTrustScore(reporterStatus, effectiveIsNearVenue, Date.now(), Date.now(), isRealLocationVerified);
+
+  if (isAuthLoading) {
+    return (
+      <Screen>
+        <LoadingSkeleton count={2} />
+      </Screen>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Screen>
+        <AuthRequiredCard />
+      </Screen>
+    );
+  }
 
   if (!lineContext.line || !lineContext.concert || !venue) {
     return (

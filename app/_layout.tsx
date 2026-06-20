@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { colors } from "../constants/theme";
+import { AuthProvider } from "../hooks/useAuth";
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
@@ -13,22 +14,26 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.ink }}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.ink },
-            headerTintColor: colors.text,
-            headerShadowVisible: false,
-            contentStyle: { backgroundColor: colors.ink },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ title: "Welcome" }} />
-          <Stack.Screen name="operator/index" options={{ title: "Operator Demo" }} />
-          <Stack.Screen name="event/[id]" options={{ title: "Event" }} />
-          <Stack.Screen name="venue/[id]" options={{ title: "Venue" }} />
-          <Stack.Screen name="report/[lineId]" options={{ title: "Report a line" }} />
-        </Stack>
+        <AuthProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: colors.ink },
+              headerTintColor: colors.text,
+              headerShadowVisible: false,
+              contentStyle: { backgroundColor: colors.ink },
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ title: "Welcome" }} />
+            <Stack.Screen name="operator/index" options={{ title: "Operator Demo" }} />
+            <Stack.Screen name="event/[id]" options={{ title: "Event" }} />
+            <Stack.Screen name="venue/[id]" options={{ title: "Venue" }} />
+            <Stack.Screen name="report/[lineId]" options={{ title: "Report a line" }} />
+            <Stack.Screen name="auth/sign-in" options={{ title: "Sign In" }} />
+            <Stack.Screen name="auth/sign-up" options={{ title: "Create Account" }} />
+          </Stack>
+        </AuthProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

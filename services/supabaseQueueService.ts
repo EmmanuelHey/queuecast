@@ -1,5 +1,16 @@
 import { mockConcerts, mockVenues, recalculateLineEstimate } from "../data/mockConcerts";
-import { Concert, CrowdLevel, EventStatus, LineEstimate, LineReport, LineType, ReporterStatus, Venue, VerificationStatus } from "../types/queue";
+import {
+  Concert,
+  CrowdLevel,
+  EventStatus,
+  LineEstimate,
+  LineReport,
+  LineReportInput,
+  LineType,
+  ReporterStatus,
+  Venue,
+  VerificationStatus,
+} from "../types/queue";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 export type SupabaseReadStatus = "connected" | "mock_fallback" | "query_failed";
@@ -63,6 +74,18 @@ type ReportRow = {
   distance_from_venue_meters: number | null;
   is_real_location_verified: boolean;
   created_at: string;
+};
+
+export type CreateLineReportInput = LineReportInput & {
+  userId: string;
+  trustScore: number;
+  verificationStatus: VerificationStatus;
+  distanceFromVenueMeters: number | null;
+};
+
+export type UserReportStats = {
+  reportsSubmitted: number;
+  verifiedReports: number;
 };
 
 const lineTypeLabels: Record<LineRow["line_type"], LineType> = {
@@ -222,6 +245,19 @@ const mapVerificationStatus = (status: ReportRow["verification_status"]): Verifi
   }
 
   return "unverified";
+};
+
+const crowdLevelValues: Record<CrowdLevel, ReportRow["crowd_level"]> = {
+  Light: "light",
+  Steady: "moderate",
+  Packed: "packed",
+};
+
+const reporterStatusValues: Record<ReporterStatus, ReportRow["reporter_status"]> = {
+  in_line: "in_line",
+  on_the_way: "on_the_way",
+  inside: "already_inside",
+  just_checking: "just_checking",
 };
 
 const mapReport = (row: ReportRow): LineReport => ({
@@ -487,4 +523,59 @@ export async function getReportsForLine(lineId: string): Promise<LineReport[]> {
     markSupabaseFallback(`reports for line ${lineId}`, error);
     return mockConcerts.flatMap((concert) => concert.lines).find((line) => line.id === lineId)?.reports ?? [];
   }
+}
+
+export async function createLineReport(input: CreateLineReportInput): Promise<LineReport | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("line_reports")
+    .insert({
+      line_id: input.lineId,
+      user_id: input.userId,
+      wait_minutes: input.waitMinutes,
+      crowd_level: crowdLevelValues[input.crowdLevel],
+      reporter_status: reporterStatusValues[input.reporterStatus],
+      verification_status: input.verificationStatus,
+      trust_score: input.trustScore,
+      distance_from_venue_meters: input.distanceFromVenueMeters,
+      is_real_location_verified: input.isRealLocationVerified,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[QueueCast] Supabase line report insert error:", error);
+    }
+
+    throw new Error(error.message);
+  }
+
+  return mapReport(data as ReportRow);
+}
+
+export async function getUserReportStats(userId: string): Promise<UserReportStats | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase.from("line_reports").select("verification_status").eq("user_id", userId);
+
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[QueueCast] Supabase user report stats query error:", error);
+    }
+
+    return null;
+  }
+
+  const reports = data ?? [];
+
+  return {
+    reportsSubmitted: reports.length,
+    verifiedReports: reports.filter((report) => report.verification_status === "verified_near_venue").length,
+  };
 }

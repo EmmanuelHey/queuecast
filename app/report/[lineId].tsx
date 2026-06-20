@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -11,6 +11,8 @@ import { lineWaitOptions } from "../../constants/theme";
 import { getReporterStatusLabel, getTrustScore, getVerificationLabel, getVerificationStatus } from "../../data/mockConcerts";
 import { useAuth } from "../../hooks/useAuth";
 import { verifyNearVenue } from "../../services/locationService";
+import { createLineReport, getEvents, getVenues } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 import { CrowdLevel, LocationPermissionStatus, LocationVerificationState, ReporterStatus } from "../../types/queue";
 
@@ -21,10 +23,14 @@ export default function ReportScreen() {
   const { lineId } = useLocalSearchParams<{ lineId: string }>();
   const { user, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
-  const concerts = useQueueStore((state) => state.concerts);
-  const venues = useQueueStore((state) => state.venues);
+  const localConcerts = useQueueStore((state) => state.concerts);
+  const localVenues = useQueueStore((state) => state.venues);
   const submitReport = useQueueStore((state) => state.submitReport);
   const isNearVenue = useQueueStore((state) => state.isNearVenue);
+  const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
+  const venuesQuery = useQuery({ queryKey: ["supabase", "venues"], queryFn: getVenues, enabled: isSupabaseConfigured });
+  const concerts = eventsQuery.data?.length ? eventsQuery.data : localConcerts;
+  const venues = venuesQuery.data?.length ? venuesQuery.data : localVenues;
   const lineContext = useMemo(() => {
     const concert = concerts.find((item) => item.lines.some((line) => line.id === lineId));
     return {
@@ -39,6 +45,8 @@ export default function ReportScreen() {
   const [permissionStatus, setPermissionStatus] = useState<LocationPermissionStatus>("not_requested");
   const [locationVerification, setLocationVerification] = useState<LocationVerificationState>("idle");
   const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const venue = venues.find((item) => item.id === lineContext.concert?.venueId);
   const isRealLocationVerified = locationVerification === "verified_near_venue";
   const effectiveIsNearVenue = isRealLocationVerified || (locationVerification === "idle" && isNearVenue);
@@ -61,6 +69,14 @@ export default function ReportScreen() {
     );
   }
 
+  if (eventsQuery.isLoading || venuesQuery.isLoading) {
+    return (
+      <Screen>
+        <LoadingSkeleton count={2} />
+      </Screen>
+    );
+  }
+
   if (!lineContext.line || !lineContext.concert || !venue) {
     return (
       <Screen>
@@ -71,11 +87,36 @@ export default function ReportScreen() {
 
   const { concert, line } = lineContext;
 
-  const handleSubmit = () => {
-    submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue: effectiveIsNearVenue, isRealLocationVerified });
-    queryClient.invalidateQueries({ queryKey: ["concerts"] });
-    queryClient.invalidateQueries({ queryKey: ["concert", concert.id] });
-    setSubmittedSummary({ trustScore, waitMinutes });
+  const handleSubmit = async () => {
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    try {
+      await createLineReport({
+        lineId: line.id,
+        userId: user.id,
+        waitMinutes,
+        crowdLevel,
+        reporterStatus,
+        isNearVenue: effectiveIsNearVenue,
+        isRealLocationVerified,
+        trustScore,
+        verificationStatus,
+        distanceFromVenueMeters: distanceMeters,
+      });
+
+      submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue: effectiveIsNearVenue, isRealLocationVerified });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["supabase", "events"] }),
+        queryClient.invalidateQueries({ queryKey: ["supabase", "event", concert.id] }),
+        queryClient.invalidateQueries({ queryKey: ["supabase", "user-report-stats", user.id] }),
+      ]);
+      setSubmittedSummary({ trustScore, waitMinutes });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to submit this report.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleVerifyLocation = async () => {
@@ -205,8 +246,20 @@ export default function ReportScreen() {
         </View>
       </View>
 
-      <Pressable onPress={handleSubmit} className="rounded-2xl bg-primary py-5 active:opacity-80">
-        <Text className="text-center text-base font-black uppercase tracking-wider text-white">Submit report</Text>
+      {submitError ? (
+        <View className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <Text className="text-sm font-semibold text-red-200">{submitError}</Text>
+        </View>
+      ) : null}
+
+      <Pressable
+        onPress={handleSubmit}
+        disabled={isSubmitting}
+        className={`rounded-2xl py-5 active:opacity-80 ${isSubmitting ? "bg-primary/40" : "bg-primary"}`}
+      >
+        <Text className="text-center text-base font-black uppercase tracking-wider text-white">
+          {isSubmitting ? "Submitting..." : "Submit report"}
+        </Text>
       </Pressable>
     </Screen>
   );

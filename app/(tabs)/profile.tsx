@@ -1,9 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { useAuth } from "../../hooks/useAuth";
+import { getUserReportStats } from "../../services/supabaseQueueService";
+import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 import { ReporterLevel } from "../../types/queue";
 
@@ -29,8 +32,15 @@ const getReporterLevel = (reportsSubmitted: number): ReporterLevel => {
 
 export default function ProfileScreen() {
   const { user, isLoading, signOut } = useAuth();
-  const reportsSubmitted = useQueueStore((state) => state.reportsSubmitted);
-  const verifiedReportsSubmitted = useQueueStore((state) => state.verifiedReportsSubmitted);
+  const localReportsSubmitted = useQueueStore((state) => state.reportsSubmitted);
+  const localVerifiedReportsSubmitted = useQueueStore((state) => state.verifiedReportsSubmitted);
+  const statsQuery = useQuery({
+    queryKey: ["supabase", "user-report-stats", user?.id],
+    queryFn: () => getUserReportStats(user?.id ?? ""),
+    enabled: isSupabaseConfigured && Boolean(user?.id),
+  });
+  const reportsSubmitted = statsQuery.data?.reportsSubmitted ?? localReportsSubmitted;
+  const verifiedReportsSubmitted = statsQuery.data?.verifiedReports ?? localVerifiedReportsSubmitted;
   const reporterLevel = getReporterLevel(reportsSubmitted);
   const helpfulScore = reportsSubmitted ? Math.round((verifiedReportsSubmitted / reportsSubmitted) * 100) : 0;
 

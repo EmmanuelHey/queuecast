@@ -5,9 +5,27 @@ import { EventCard } from "../../components/EventCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
 import { VenueCard } from "../../components/VenueCard";
-import { getEvents, getVenues } from "../../services/supabaseQueueService";
+import { getEvents, getSupabaseReadStatus, getVenues } from "../../services/supabaseQueueService";
 import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
+
+const supabaseBadgeStyles = {
+  connected: {
+    label: "Supabase connected",
+    containerClassName: "border-emerald-500/30 bg-emerald-500/15",
+    textClassName: "text-emerald-300",
+  },
+  mock_fallback: {
+    label: "Using mock fallback",
+    containerClassName: "border-slate-500/30 bg-slate-500/15",
+    textClassName: "text-slate-300",
+  },
+  query_failed: {
+    label: "Supabase query failed",
+    containerClassName: "border-red-500/30 bg-red-500/15",
+    textClassName: "text-red-300",
+  },
+};
 
 export default function HomeScreen() {
   const fallbackConcerts = useQueueStore((state) => state.concerts);
@@ -21,11 +39,19 @@ export default function HomeScreen() {
   const averageEntryWait = concerts.length
     ? Math.round(concerts.reduce((sum, concert) => sum + (concert.lines[0]?.waitMinutes ?? 0), 0) / concerts.length)
     : 0;
+  const supabaseBadge = supabaseBadgeStyles[getSupabaseReadStatus()];
 
   return (
     <Screen>
       <View className="pb-5 pt-3">
-        <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">QueueCast</Text>
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-sm font-bold uppercase tracking-[3px] text-primary-soft">QueueCast</Text>
+          {process.env.NODE_ENV !== "production" ? (
+            <View className={`rounded-full border px-2.5 py-1 ${supabaseBadge.containerClassName}`}>
+              <Text className={`text-[10px] font-black uppercase tracking-wider ${supabaseBadge.textClassName}`}>{supabaseBadge.label}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text className="mt-3 text-4xl font-black leading-tight text-white">Dallas concert lines, live</Text>
         <Text className="mt-3 text-base leading-6 text-slate-400">
           Check Dallas-area entry, merch, parking, food, and bathroom waits before the opener starts.

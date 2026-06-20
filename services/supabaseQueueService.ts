@@ -2,6 +2,11 @@ import { mockConcerts, mockVenues, recalculateLineEstimate } from "../data/mockC
 import { Concert, CrowdLevel, EventStatus, LineEstimate, LineReport, LineType, ReporterStatus, Venue, VerificationStatus } from "../types/queue";
 import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
+export type SupabaseReadStatus = "connected" | "mock_fallback" | "query_failed";
+
+let supabaseReadStatus: SupabaseReadStatus = isSupabaseConfigured ? "mock_fallback" : "mock_fallback";
+let hasSupabaseQueryFailed = false;
+
 type VenueRow = {
   id: string;
   name: string;
@@ -75,6 +80,33 @@ const accents = ["#8B5CF6", "#22C55E", "#F472B6", "#06B6D4", "#FBBF24", "#A78BFA
 
 const fallbackConcertById = (id: string) => mockConcerts.find((concert) => concert.id === id);
 const fallbackVenueById = (id: string) => mockVenues.find((venue) => venue.id === id);
+
+export function getSupabaseReadStatus(): SupabaseReadStatus {
+  if (!isSupabaseConfigured) {
+    return "mock_fallback";
+  }
+
+  if (hasSupabaseQueryFailed) {
+    return "query_failed";
+  }
+
+  return supabaseReadStatus;
+}
+
+function markSupabaseConnected() {
+  if (!hasSupabaseQueryFailed) {
+    supabaseReadStatus = "connected";
+  }
+}
+
+function markSupabaseFallback(source: string, error: unknown) {
+  hasSupabaseQueryFailed = true;
+  supabaseReadStatus = "query_failed";
+
+  if (process.env.NODE_ENV !== "production") {
+    console.error(`[QueueCast] Supabase ${source} query failed. Using mock fallback.`, error);
+  }
+}
 
 const formatTime = (value: string | null) => {
   if (!value) {
@@ -304,7 +336,7 @@ export async function getEvents(): Promise<Concert[]> {
     const [venueRows, eventRows] = await Promise.all([fetchVenueRows(), fetchEventRows()]);
     const venuesById = Object.fromEntries(venueRows.map((venue) => [venue.id, mapVenue(venue)]));
 
-    return Promise.all(
+    const events = await Promise.all(
       eventRows.map((event, index) => {
         const venue = venuesById[event.venue_id];
 
@@ -315,15 +347,22 @@ export async function getEvents(): Promise<Concert[]> {
         return buildEvent(event, venue, index);
       }),
     );
-  } catch {
+
+    markSupabaseConnected();
+    return events;
+  } catch (error) {
+    markSupabaseFallback("events", error);
     return mockConcerts;
   }
 }
 
 export async function getVenues(): Promise<Venue[]> {
   try {
-    return (await fetchVenueRows()).map(mapVenue);
-  } catch {
+    const venues = (await fetchVenueRows()).map(mapVenue);
+    markSupabaseConnected();
+    return venues;
+  } catch (error) {
+    markSupabaseFallback("venues", error);
     return mockVenues;
   }
 }
@@ -343,8 +382,11 @@ export async function getEventById(id: string): Promise<Concert | undefined> {
       throw new Error("Venue not found.");
     }
 
-    return buildEvent(event as EventRow, venue);
-  } catch {
+    const mappedEvent = await buildEvent(event as EventRow, venue);
+    markSupabaseConnected();
+    return mappedEvent;
+  } catch (error) {
+    markSupabaseFallback(`event ${id}`, error);
     return fallbackConcertById(id);
   }
 }
@@ -358,8 +400,11 @@ export async function getVenueById(id: string): Promise<Venue | undefined> {
       throw error ?? new Error("Venue not found.");
     }
 
-    return mapVenue(data as VenueRow);
-  } catch {
+    const venue = mapVenue(data as VenueRow);
+    markSupabaseConnected();
+    return venue;
+  } catch (error) {
+    markSupabaseFallback(`venue ${id}`, error);
     return fallbackVenueById(id);
   }
 }
@@ -367,16 +412,22 @@ export async function getVenueById(id: string): Promise<Venue | undefined> {
 export async function getLinesForEvent(eventId: string): Promise<LineEstimate[]> {
   try {
     const lines = await fetchLineRowsForEvent(eventId);
-    return Promise.all(lines.map(buildLineEstimate));
-  } catch {
+    const estimates = await Promise.all(lines.map(buildLineEstimate));
+    markSupabaseConnected();
+    return estimates;
+  } catch (error) {
+    markSupabaseFallback(`lines for event ${eventId}`, error);
     return fallbackConcertById(eventId)?.lines ?? [];
   }
 }
 
 export async function getReportsForLine(lineId: string): Promise<LineReport[]> {
   try {
-    return (await fetchReportRowsForLine(lineId)).map(mapReport);
-  } catch {
+    const reports = (await fetchReportRowsForLine(lineId)).map(mapReport);
+    markSupabaseConnected();
+    return reports;
+  } catch (error) {
+    markSupabaseFallback(`reports for line ${lineId}`, error);
     return mockConcerts.flatMap((concert) => concert.lines).find((line) => line.id === lineId)?.reports ?? [];
   }
 }

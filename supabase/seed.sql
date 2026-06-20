@@ -2,6 +2,38 @@
 -- Run this after supabase/schema.sql.
 -- All UUIDs are fixed so the seed can be rerun consistently.
 
+begin;
+
+-- Remove only the QueueCast sample records before recreating the fixed UUID
+-- chain. Deleting venues cascades to their events, lines, and line reports.
+-- This prevents existing venue rows with different UUIDs from breaking the
+-- events.venue_id foreign key.
+delete from public.venues
+where id in (
+  '20000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000002',
+  '20000000-0000-4000-8000-000000000003',
+  '20000000-0000-4000-8000-000000000004',
+  '20000000-0000-4000-8000-000000000005'
+)
+or name in (
+  'American Airlines Center',
+  'Dos Equis Pavilion',
+  'Toyota Music Factory',
+  'House of Blues Dallas',
+  'The Factory in Deep Ellum'
+);
+
+-- Profiles do not cascade from venues, so reset only the four sample users.
+-- Their line reports and reporter scores are removed through foreign keys.
+delete from public.profiles
+where id in (
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+  '10000000-0000-4000-8000-000000000004'
+);
+
 -- Sample reporter profiles used by line_reports and reporter_scores.
 insert into public.profiles (id, display_name, avatar_url, home_city)
 values
@@ -448,3 +480,56 @@ on conflict (user_id) do update set
   verified_reports = excluded.verified_reports,
   helpful_score = excluded.helpful_score,
   reporter_level = excluded.reporter_level;
+
+-- Fail loudly if the expected Dallas MVP seed rows were not written.
+do $$
+declare
+  seeded_profiles_count integer;
+  seeded_venues_count integer;
+  seeded_events_count integer;
+  seeded_lines_count integer;
+  seeded_reports_count integer;
+  seeded_reporter_scores_count integer;
+begin
+  select count(*) into seeded_profiles_count from public.profiles where id::text like '10000000-0000-4000-8000-%';
+  select count(*) into seeded_venues_count from public.venues where id::text like '20000000-0000-4000-8000-%';
+  select count(*) into seeded_events_count from public.events where id::text like '30000000-0000-4000-8000-%';
+  select count(*) into seeded_lines_count from public.lines where id::text like '40000000-0000-4000-8000-%';
+  select count(*) into seeded_reports_count from public.line_reports where id::text like '50000000-0000-4000-8000-%';
+  select count(*) into seeded_reporter_scores_count from public.reporter_scores where id::text like '60000000-0000-4000-8000-%';
+
+  if seeded_profiles_count <> 4 then
+    raise exception 'QueueCast seed expected 4 profiles, found %', seeded_profiles_count;
+  end if;
+
+  if seeded_venues_count <> 5 then
+    raise exception 'QueueCast seed expected 5 venues, found %', seeded_venues_count;
+  end if;
+
+  if seeded_events_count <> 8 then
+    raise exception 'QueueCast seed expected 8 events, found %', seeded_events_count;
+  end if;
+
+  if seeded_lines_count <> 40 then
+    raise exception 'QueueCast seed expected 40 lines, found %', seeded_lines_count;
+  end if;
+
+  if seeded_reports_count <> 12 then
+    raise exception 'QueueCast seed expected 12 line reports, found %', seeded_reports_count;
+  end if;
+
+  if seeded_reporter_scores_count <> 4 then
+    raise exception 'QueueCast seed expected 4 reporter scores, found %', seeded_reporter_scores_count;
+  end if;
+end $$;
+
+commit;
+
+-- Supabase SQL Editor should return this row after seeding.
+select
+  (select count(*) from public.profiles where id::text like '10000000-0000-4000-8000-%') as seeded_profiles,
+  (select count(*) from public.venues where id::text like '20000000-0000-4000-8000-%') as seeded_venues,
+  (select count(*) from public.events where id::text like '30000000-0000-4000-8000-%') as seeded_events,
+  (select count(*) from public.lines where id::text like '40000000-0000-4000-8000-%') as seeded_lines,
+  (select count(*) from public.line_reports where id::text like '50000000-0000-4000-8000-%') as seeded_line_reports,
+  (select count(*) from public.reporter_scores where id::text like '60000000-0000-4000-8000-%') as seeded_reporter_scores;

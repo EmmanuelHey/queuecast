@@ -6,7 +6,7 @@ import { EventCard } from "../../components/EventCard";
 import { LineEstimateCard } from "../../components/LineEstimateCard";
 import { LoadingSkeleton } from "../../components/LoadingSkeleton";
 import { Screen } from "../../components/Screen";
-import { getEvents, getVenueById } from "../../services/supabaseQueueService";
+import { getEvents, getVenueById, isUuid } from "../../services/supabaseQueueService";
 import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 
@@ -19,7 +19,7 @@ export default function VenueDetailScreen() {
   const venueQuery = useQuery({
     queryKey: ["supabase", "venue", id],
     queryFn: () => getVenueById(id),
-    enabled: isSupabaseConfigured && Boolean(id),
+    enabled: isSupabaseConfigured && isUuid(id),
   });
   const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
   const venue = venueQuery.data ?? fallbackVenue;

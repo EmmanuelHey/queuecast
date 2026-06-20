@@ -152,6 +152,12 @@ function markSupabaseFallback(source: string, error: unknown) {
   }
 }
 
+function logMockIdFallback(resource: string, id: string) {
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[QueueCast] ${resource} received mock id "${id}". Skipping Supabase UUID query.`);
+  }
+}
+
 const formatTime = (value: string | null) => {
   if (!value) {
     return "TBD";
@@ -368,6 +374,11 @@ async function fetchEventRows() {
 }
 
 async function fetchLineRowsForEvent(eventId: string) {
+  if (!isUuid(eventId)) {
+    logMockIdFallback("Lines lookup", eventId);
+    return [];
+  }
+
   const client = await getSupabaseOrThrow();
   const { data, error } = await client.from("lines").select("*").eq("event_id", eventId).order("line_type");
 
@@ -379,6 +390,11 @@ async function fetchLineRowsForEvent(eventId: string) {
 }
 
 async function fetchReportRowsForLine(lineId: string) {
+  if (!isUuid(lineId)) {
+    logMockIdFallback("Reports lookup", lineId);
+    return [];
+  }
+
   const client = await getSupabaseOrThrow();
   const { data, error } = await client.from("line_reports").select("*").eq("line_id", lineId).order("created_at", { ascending: false });
 
@@ -467,6 +483,11 @@ export async function getVenues(): Promise<Venue[]> {
 }
 
 export async function getEventById(id: string): Promise<Concert | undefined> {
+  if (!isUuid(id)) {
+    logMockIdFallback("Event lookup", id);
+    return fallbackConcertById(id);
+  }
+
   try {
     const client = await getSupabaseOrThrow();
     const { data: event, error: eventError } = await client.from("events").select("*").eq("id", id).single();
@@ -491,6 +512,11 @@ export async function getEventById(id: string): Promise<Concert | undefined> {
 }
 
 export async function getVenueById(id: string): Promise<Venue | undefined> {
+  if (!isUuid(id)) {
+    logMockIdFallback("Venue lookup", id);
+    return fallbackVenueById(id);
+  }
+
   try {
     const client = await getSupabaseOrThrow();
     const { data, error } = await client.from("venues").select("*").eq("id", id).single();
@@ -509,6 +535,11 @@ export async function getVenueById(id: string): Promise<Venue | undefined> {
 }
 
 export async function getLinesForEvent(eventId: string): Promise<LineEstimate[]> {
+  if (!isUuid(eventId)) {
+    logMockIdFallback("Lines lookup", eventId);
+    return fallbackConcertById(eventId)?.lines ?? [];
+  }
+
   try {
     const lines = await fetchLineRowsForEvent(eventId);
     const estimates = await Promise.all(lines.map(buildLineEstimate));
@@ -521,6 +552,11 @@ export async function getLinesForEvent(eventId: string): Promise<LineEstimate[]>
 }
 
 export async function getReportsForLine(lineId: string): Promise<LineReport[]> {
+  if (!isUuid(lineId)) {
+    logMockIdFallback("Reports lookup", lineId);
+    return mockConcerts.flatMap((concert) => concert.lines).find((line) => line.id === lineId)?.reports ?? [];
+  }
+
   try {
     const reports = (await fetchReportRowsForLine(lineId)).map(mapReport);
     markSupabaseConnected();
@@ -537,7 +573,8 @@ export async function createLineReport(input: CreateLineReportInput): Promise<Li
   }
 
   if (!isUuid(input.lineId)) {
-    throw new Error("This mock line is not linked to a Supabase line record.");
+    logMockIdFallback("Report insert", input.lineId);
+    return null;
   }
 
   const insertPayload = {
@@ -575,6 +612,11 @@ export async function createLineReport(input: CreateLineReportInput): Promise<Li
 
 export async function getUserReportStats(userId: string): Promise<UserReportStats | null> {
   if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  if (!isUuid(userId)) {
+    logMockIdFallback("User report stats lookup", userId);
     return null;
   }
 

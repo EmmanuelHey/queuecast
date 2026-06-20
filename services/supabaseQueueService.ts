@@ -88,6 +88,12 @@ export type UserReportStats = {
   verifiedReports: number;
 };
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string | undefined | null): value is string {
+  return Boolean(value && uuidPattern.test(value));
+}
+
 const lineTypeLabels: Record<LineRow["line_type"], LineType> = {
   entry: "Entry",
   merch: "Merch",
@@ -530,19 +536,29 @@ export async function createLineReport(input: CreateLineReportInput): Promise<Li
     return null;
   }
 
+  if (!isUuid(input.lineId)) {
+    throw new Error("This mock line is not linked to a Supabase line record.");
+  }
+
+  const insertPayload = {
+    line_id: input.lineId,
+    user_id: input.userId,
+    wait_minutes: input.waitMinutes,
+    crowd_level: crowdLevelValues[input.crowdLevel],
+    reporter_status: reporterStatusValues[input.reporterStatus],
+    verification_status: input.verificationStatus,
+    trust_score: input.trustScore,
+    distance_from_venue_meters: input.distanceFromVenueMeters,
+    is_real_location_verified: input.isRealLocationVerified,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[QueueCast] Supabase line report insert payload:", insertPayload);
+  }
+
   const { data, error } = await supabase
     .from("line_reports")
-    .insert({
-      line_id: input.lineId,
-      user_id: input.userId,
-      wait_minutes: input.waitMinutes,
-      crowd_level: crowdLevelValues[input.crowdLevel],
-      reporter_status: reporterStatusValues[input.reporterStatus],
-      verification_status: input.verificationStatus,
-      trust_score: input.trustScore,
-      distance_from_venue_meters: input.distanceFromVenueMeters,
-      is_real_location_verified: input.isRealLocationVerified,
-    })
+    .insert(insertPayload)
     .select("*")
     .single();
 

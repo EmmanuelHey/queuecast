@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AuthRequiredCard } from "../../components/AuthRequiredCard";
 import { EmptyState } from "../../components/EmptyState";
@@ -11,7 +11,7 @@ import { lineWaitOptions } from "../../constants/theme";
 import { getReporterStatusLabel, getTrustScore, getVerificationLabel, getVerificationStatus } from "../../data/mockConcerts";
 import { useAuth } from "../../hooks/useAuth";
 import { verifyNearVenue } from "../../services/locationService";
-import { createLineReport, getEvents, getVenues } from "../../services/supabaseQueueService";
+import { createLineReport, getEvents, getVenues, isUuid } from "../../services/supabaseQueueService";
 import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 import { CrowdLevel, LocationPermissionStatus, LocationVerificationState, ReporterStatus } from "../../types/queue";
@@ -52,6 +52,16 @@ export default function ReportScreen() {
   const effectiveIsNearVenue = isRealLocationVerified || (locationVerification === "idle" && isNearVenue);
   const verificationStatus = getVerificationStatus(reporterStatus, effectiveIsNearVenue);
   const trustScore = getTrustScore(reporterStatus, effectiveIsNearVenue, Date.now(), Date.now(), isRealLocationVerified);
+  const isSupabaseLine = isUuid(lineId);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[QueueCast] Selected report line:", {
+        lineId,
+        isUuid: isSupabaseLine,
+      });
+    }
+  }, [isSupabaseLine, lineId]);
 
   if (isAuthLoading) {
     return (
@@ -92,25 +102,34 @@ export default function ReportScreen() {
     setIsSubmitting(true);
 
     try {
-      await createLineReport({
-        lineId: line.id,
-        userId: user.id,
-        waitMinutes,
-        crowdLevel,
-        reporterStatus,
-        isNearVenue: effectiveIsNearVenue,
-        isRealLocationVerified,
-        trustScore,
-        verificationStatus,
-        distanceFromVenueMeters: distanceMeters,
-      });
+      if (isSupabaseLine) {
+        await createLineReport({
+          lineId: line.id,
+          userId: user.id,
+          waitMinutes,
+          crowdLevel,
+          reporterStatus,
+          isNearVenue: effectiveIsNearVenue,
+          isRealLocationVerified,
+          trustScore,
+          verificationStatus,
+          distanceFromVenueMeters: distanceMeters,
+        });
+      } else if (process.env.NODE_ENV !== "production") {
+        console.warn("[QueueCast] Mock line selected; using local report fallback:", line.id);
+      }
 
       submitReport({ lineId: line.id, waitMinutes, crowdLevel, reporterStatus, isNearVenue: effectiveIsNearVenue, isRealLocationVerified });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["supabase", "events"] }),
-        queryClient.invalidateQueries({ queryKey: ["supabase", "event", concert.id] }),
-        queryClient.invalidateQueries({ queryKey: ["supabase", "user-report-stats", user.id] }),
-      ]);
+
+      if (isSupabaseLine) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["supabase", "events"] }),
+          queryClient.invalidateQueries({ queryKey: ["supabase", "event", concert.id] }),
+          queryClient.invalidateQueries({ queryKey: ["supabase", "event-lines", concert.id] }),
+          queryClient.invalidateQueries({ queryKey: ["supabase", "user-report-stats", user.id] }),
+        ]);
+      }
+
       setSubmittedSummary({ trustScore, waitMinutes });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Unable to submit this report.");

@@ -4,8 +4,15 @@ import { isSupabaseConfigured, supabase } from "./supabaseClient";
 
 export type SupabaseReadStatus = "connected" | "mock_fallback" | "query_failed";
 
-let supabaseReadStatus: SupabaseReadStatus = isSupabaseConfigured ? "mock_fallback" : "mock_fallback";
+let supabaseReadStatus: SupabaseReadStatus = "mock_fallback";
 let hasSupabaseQueryFailed = false;
+
+class EmptySupabaseResultError extends Error {
+  constructor(resource: string) {
+    super(`Supabase returned no ${resource}.`);
+    this.name = "EmptySupabaseResultError";
+  }
+}
 
 type VenueRow = {
   id: string;
@@ -96,6 +103,14 @@ export function getSupabaseReadStatus(): SupabaseReadStatus {
 function markSupabaseConnected() {
   if (!hasSupabaseQueryFailed) {
     supabaseReadStatus = "connected";
+  }
+}
+
+function markSupabaseEmptyFallback(source: string) {
+  supabaseReadStatus = "mock_fallback";
+
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[QueueCast] Supabase returned 0 ${source}. Using mock fallback.`);
   }
 }
 
@@ -275,10 +290,19 @@ async function fetchVenueRows() {
   const { data, error } = await client.from("venues").select("*").order("name");
 
   if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[QueueCast] Supabase venues query error:", error);
+    }
     throw error;
   }
 
-  return (data ?? []) as VenueRow[];
+  const rows = (data ?? []) as VenueRow[];
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[QueueCast] Supabase venues query count: ${rows.length}`);
+  }
+
+  return rows;
 }
 
 async function fetchEventRows() {
@@ -286,10 +310,19 @@ async function fetchEventRows() {
   const { data, error } = await client.from("events").select("*").order("event_date");
 
   if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[QueueCast] Supabase events query error:", error);
+    }
     throw error;
   }
 
-  return (data ?? []) as EventRow[];
+  const rows = (data ?? []) as EventRow[];
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[QueueCast] Supabase events query count: ${rows.length}`);
+  }
+
+  return rows;
 }
 
 async function fetchLineRowsForEvent(eventId: string) {
@@ -334,6 +367,15 @@ async function buildEvent(row: EventRow, venue: Venue, index = 0) {
 export async function getEvents(): Promise<Concert[]> {
   try {
     const [venueRows, eventRows] = await Promise.all([fetchVenueRows(), fetchEventRows()]);
+
+    if (!eventRows.length) {
+      throw new EmptySupabaseResultError("events");
+    }
+
+    if (!venueRows.length) {
+      throw new EmptySupabaseResultError("venues required to map events");
+    }
+
     const venuesById = Object.fromEntries(venueRows.map((venue) => [venue.id, mapVenue(venue)]));
 
     const events = await Promise.all(
@@ -351,6 +393,11 @@ export async function getEvents(): Promise<Concert[]> {
     markSupabaseConnected();
     return events;
   } catch (error) {
+    if (error instanceof EmptySupabaseResultError) {
+      markSupabaseEmptyFallback("events");
+      return mockConcerts;
+    }
+
     markSupabaseFallback("events", error);
     return mockConcerts;
   }
@@ -359,9 +406,19 @@ export async function getEvents(): Promise<Concert[]> {
 export async function getVenues(): Promise<Venue[]> {
   try {
     const venues = (await fetchVenueRows()).map(mapVenue);
+
+    if (!venues.length) {
+      throw new EmptySupabaseResultError("venues");
+    }
+
     markSupabaseConnected();
     return venues;
   } catch (error) {
+    if (error instanceof EmptySupabaseResultError) {
+      markSupabaseEmptyFallback("venues");
+      return mockVenues;
+    }
+
     markSupabaseFallback("venues", error);
     return mockVenues;
   }

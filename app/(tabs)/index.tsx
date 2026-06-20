@@ -32,8 +32,8 @@ export default function HomeScreen() {
   const fallbackVenues = useQueueStore((state) => state.venues);
   const eventsQuery = useQuery({ queryKey: ["supabase", "events"], queryFn: getEvents, enabled: isSupabaseConfigured });
   const venuesQuery = useQuery({ queryKey: ["supabase", "venues"], queryFn: getVenues, enabled: isSupabaseConfigured });
-  const concerts = eventsQuery.data ?? fallbackConcerts;
-  const venues = venuesQuery.data ?? fallbackVenues;
+  const concerts = eventsQuery.data?.length ? eventsQuery.data : fallbackConcerts;
+  const venues = venuesQuery.data?.length ? venuesQuery.data : fallbackVenues;
   const isLoading = eventsQuery.isLoading || venuesQuery.isLoading;
   const highlightedEvent = concerts.find((concert) => concert.status === "Live now") ?? concerts.find((concert) => concert.status === "Doors soon") ?? concerts[0];
   const averageEntryWait = concerts.length

@@ -335,40 +335,44 @@ async function getSupabaseOrThrow() {
 
 async function fetchVenueRows() {
   const client = await getSupabaseOrThrow();
-  const { data, error } = await client.from("venues").select("*").order("name");
+  const { data, error, count } = await client.schema("public").from("venues").select("*", { count: "exact" }).order("name");
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[QueueCast] Supabase venues query debug:", {
+      error,
+      count,
+      returnedRows: data?.length ?? 0,
+      firstRow: data?.[0] ?? null,
+    });
+  }
 
   if (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[QueueCast] Supabase venues query error:", error);
-    }
     throw error;
   }
 
   const rows = (data ?? []) as VenueRow[];
-
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[QueueCast] Supabase venues query count: ${rows.length}`);
-  }
 
   return rows;
 }
 
 async function fetchEventRows() {
   const client = await getSupabaseOrThrow();
-  const { data, error } = await client.from("events").select("*").order("event_date");
+  const { data, error, count } = await client.schema("public").from("events").select("*", { count: "exact" }).order("event_date");
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[QueueCast] Supabase events query debug:", {
+      error,
+      count,
+      returnedRows: data?.length ?? 0,
+      firstRow: data?.[0] ?? null,
+    });
+  }
 
   if (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[QueueCast] Supabase events query error:", error);
-    }
     throw error;
   }
 
   const rows = (data ?? []) as EventRow[];
-
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[QueueCast] Supabase events query count: ${rows.length}`);
-  }
 
   return rows;
 }
@@ -381,6 +385,15 @@ async function fetchLineRowsForEvent(eventId: string) {
 
   const client = await getSupabaseOrThrow();
   const { data, error } = await client.from("lines").select("*").eq("event_id", eventId).order("line_type");
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[QueueCast] Supabase event lines query debug:", {
+      eventId,
+      error,
+      count: data?.length ?? 0,
+      firstRow: data?.[0] ?? null,
+    });
+  }
 
   if (error) {
     throw error;

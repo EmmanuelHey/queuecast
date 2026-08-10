@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
@@ -55,9 +55,25 @@ export default function EventDetailScreen() {
   });
   const venue = venueQuery.data ?? fallbackVenue;
   const isLoading = eventQuery.isLoading || linesQuery.isLoading || venueQuery.isLoading;
-  const predictions = useMemo(() => (concert && venue ? predictEventLines(concert, venue, arrivalOffset) : []), [arrivalOffset, concert, venue]);
+  const hasLines = Boolean(concert?.lines.length);
+  const eventSource = eventQuery.data ? "supabase" : "mock";
+  const predictions = useMemo(
+    () => (concert && venue && concert.lines.length ? predictEventLines(concert, venue, arrivalOffset) : []),
+    [arrivalOffset, concert, venue],
+  );
   const predictionByLineId = Object.fromEntries(predictions.map((prediction) => [prediction.lineId, prediction]));
   const historicalInsight = useMemo(() => (concert ? getHistoricalInsightForEvent(concert) : null), [concert]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[QueueCast] Event detail line state:", {
+        eventId: id,
+        linesCount: concert?.lines.length ?? 0,
+        source: eventSource,
+        linesLoading: linesQuery.isLoading,
+      });
+    }
+  }, [concert?.lines.length, eventSource, id, linesQuery.isLoading]);
 
   if (!concert || !venue) {
     if (isLoading) {
@@ -81,7 +97,7 @@ export default function EventDetailScreen() {
   }
 
   const primaryLine = concert.lines.find((line) => line.type === "Entry") ?? concert.lines[0];
-  const entryPrediction = predictionByLineId[primaryLine.id];
+  const entryPrediction = primaryLine ? predictionByLineId[primaryLine.id] : undefined;
 
   return (
     <SafeAreaView className="flex-1 bg-ink">
@@ -162,7 +178,9 @@ export default function EventDetailScreen() {
           <Text className="text-lg font-black text-white">Line estimates</Text>
           <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">Trust weighted</Text>
         </View>
-        {concert.lines.length ? (
+        {linesQuery.isLoading ? (
+          <LoadingSkeleton count={2} />
+        ) : hasLines ? (
           concert.lines.map((line) => (
             <LineEstimateCard
               key={line.id}
@@ -173,8 +191,8 @@ export default function EventDetailScreen() {
           ))
         ) : (
           <EmptyState
-            title="No line reports yet"
-            body="Be the first person to report entry, merch, parking, food, or bathroom waits for this event."
+            title="No lines found for this event yet"
+            body="Line data may still be loading or has not been seeded."
           />
         )}
 
@@ -231,15 +249,17 @@ export default function EventDetailScreen() {
         ) : null}
       </ScrollView>
 
-      <View className="absolute bottom-5 left-5 right-5">
-        <Pressable
-          onPress={() => router.push(`/report/${primaryLine.id}`)}
-          className="rounded-2xl bg-primary py-5 shadow-lg active:opacity-90"
-          style={{ shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } }}
-        >
-          <Text className="text-center text-base font-black uppercase tracking-wider text-white">Report a Line</Text>
-        </Pressable>
-      </View>
+      {primaryLine ? (
+        <View className="absolute bottom-5 left-5 right-5">
+          <Pressable
+            onPress={() => router.push(`/report/${primaryLine.id}`)}
+            className="rounded-2xl bg-primary py-5 shadow-lg active:opacity-90"
+            style={{ shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } }}
+          >
+            <Text className="text-center text-base font-black uppercase tracking-wider text-white">Report a Line</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

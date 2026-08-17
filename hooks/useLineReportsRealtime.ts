@@ -16,17 +16,18 @@ type LineReportInsertPayload = {
 
 export function useLineReportsRealtime({ eventId, lineIds, enabled = true, onReportReceived }: UseLineReportsRealtimeOptions) {
   const queryClient = useQueryClient();
-  const lineIdKey = lineIds.join("|");
+  const lineIdKey = [...lineIds].sort().join("|");
 
   useEffect(() => {
-    if (!enabled || !isSupabaseConfigured || !supabase || !isUuid(eventId) || !lineIds.length) {
+    if (!enabled || !isSupabaseConfigured || !supabase || !isUuid(eventId) || !lineIdKey) {
       return undefined;
     }
 
     const client = supabase;
-    const eventLineIds = new Set(lineIds);
+    const eventLineIds = new Set(lineIdKey.split("|"));
+    const channelName = `queuecast-event-lines-${eventId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const channel = client
-      .channel(`queuecast-event-lines-${eventId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -47,10 +48,16 @@ export function useLineReportsRealtime({ eventId, lineIds, enabled = true, onRep
           onReportReceived?.();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (process.env.NODE_ENV !== "production") {
+          if (status === "SUBSCRIBED" || status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.log(`[QueueCast] Realtime ${status}:`, { channelName, eventId });
+          }
+        }
+      });
 
     return () => {
       client.removeChannel(channel);
     };
-  }, [enabled, eventId, lineIdKey, lineIds, onReportReceived, queryClient]);
+  }, [enabled, eventId, lineIdKey, onReportReceived, queryClient]);
 }

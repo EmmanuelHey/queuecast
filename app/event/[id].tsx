@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
@@ -15,6 +15,7 @@ import { getEventById, getLinesForEvent, getVenueById, isUuid } from "../../serv
 import { isSupabaseConfigured } from "../../services/supabaseClient";
 import { useQueueStore } from "../../store/useQueueStore";
 import { ArrivalOffset } from "../../types/queue";
+import { useLineReportsRealtime } from "../../hooks/useLineReportsRealtime";
 
 const arrivalOptions: Array<{ label: string; value: ArrivalOffset }> = [
   { label: "Now", value: 0 },
@@ -29,6 +30,7 @@ export default function EventDetailScreen() {
   const fallbackConcert = useQueueStore((state) => state.concerts.find((item) => item.id === id));
   const fallbackVenues = useQueueStore((state) => state.venues);
   const [arrivalOffset, setArrivalOffset] = useState<ArrivalOffset>(30);
+  const [showRealtimeBanner, setShowRealtimeBanner] = useState(false);
   const eventQuery = useQuery({
     queryKey: ["supabase", "event", id],
     queryFn: () => getEventById(id),
@@ -57,6 +59,10 @@ export default function EventDetailScreen() {
   const isLoading = eventQuery.isLoading || linesQuery.isLoading || venueQuery.isLoading;
   const hasLines = Boolean(concert?.lines.length);
   const eventSource = eventQuery.data ? "supabase" : "mock";
+  const realtimeLineIds = useMemo(() => (isUuid(id) && concert?.lines.length ? concert.lines.map((line) => line.id) : []), [concert?.lines, id]);
+  const handleRealtimeReport = useCallback(() => {
+    setShowRealtimeBanner(true);
+  }, []);
   const predictions = useMemo(
     () => (concert && venue && concert.lines.length ? predictEventLines(concert, venue, arrivalOffset) : []),
     [arrivalOffset, concert, venue],
@@ -74,6 +80,25 @@ export default function EventDetailScreen() {
       });
     }
   }, [concert?.lines.length, eventSource, id, linesQuery.isLoading]);
+
+  useLineReportsRealtime({
+    eventId: id,
+    lineIds: realtimeLineIds,
+    enabled: eventSource === "supabase",
+    onReportReceived: handleRealtimeReport,
+  });
+
+  useEffect(() => {
+    if (!showRealtimeBanner) {
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      setShowRealtimeBanner(false);
+    }, 3500);
+
+    return () => clearTimeout(timeout);
+  }, [showRealtimeBanner]);
 
   if (!concert || !venue) {
     if (isLoading) {
@@ -101,6 +126,11 @@ export default function EventDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-ink">
+      {showRealtimeBanner ? (
+        <View className="absolute left-5 right-5 top-14 z-10 rounded-2xl border border-primary/30 bg-primary px-4 py-3 shadow-lg">
+          <Text className="text-center text-sm font-black uppercase tracking-wider text-white">New line report received</Text>
+        </View>
+      ) : null}
       <ScrollView className="flex-1" contentContainerClassName="px-5 pb-28" showsVerticalScrollIndicator={false}>
         <View className="pb-6 pt-3">
           <View className="mb-5 h-2 w-24 rounded-full" style={{ backgroundColor: concert.accent }} />
